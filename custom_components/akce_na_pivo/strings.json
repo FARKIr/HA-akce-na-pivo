@@ -1,0 +1,98 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Akce na pivo",
+        "description": "Pick beer brands (or type your own and press Enter), where to measure distance from and when to check the deals. Deals come from kupi.cz, stores from OpenStreetMap.",
+        "data": {
+          "name": "Name",
+          "brands": "Beer brands",
+          "location_entity": "Location (person / device tracker / zone) – empty = HA home",
+          "update_time": "Daily check time",
+          "update_interval_hours": "Additionally check every N hours (0 = daily only)",
+          "top_count": "How many cheapest offers to show",
+          "sort_by": "Sort by",
+          "max_distance_km": "Search stores within",
+          "require_nearby_store": "Only show shops with a branch nearby",
+          "price_alert": "Alert when 0.5 l costs less than",
+          "include_upcoming": "Include upcoming deals",
+          "exclude_loyalty": "Skip loyalty-card-only deals",
+          "exclude_nonalcoholic": "Skip non-alcoholic beer",
+          "max_pages": "Max kupi.cz pages to download"
+        }
+      }
+    },
+    "error": {
+      "no_brands": "Select or enter at least one brand."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Beer deals – options",
+        "data": {
+          "brands": "Beer brands",
+          "location_entity": "Location (person / device tracker / zone) – empty = HA home",
+          "update_time": "Daily check time",
+          "update_interval_hours": "Additionally check every N hours (0 = daily only)",
+          "top_count": "How many cheapest offers to show",
+          "sort_by": "Sort by",
+          "max_distance_km": "Search stores within",
+          "require_nearby_store": "Only show shops with a branch nearby",
+          "price_alert": "Alert when 0.5 l costs less than",
+          "include_upcoming": "Include upcoming deals",
+          "exclude_loyalty": "Skip loyalty-card-only deals",
+          "exclude_nonalcoholic": "Skip non-alcoholic beer",
+          "max_pages": "Max kupi.cz pages to download"
+        }
+      }
+    },
+    "error": {
+      "no_brands": "Select or enter at least one brand."
+    }
+  },
+  "selector": {
+    "sort_by": {
+      "options": {
+        "unit": "Price per 0.5 l (best value)",
+        "price": "Package price",
+        "distance": "Nearest store"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "cheapest": {
+        "name": "Cheapest beer"
+      },
+      "per_half_liter": {
+        "name": "Cheapest beer per 0.5 l"
+      },
+      "count": {
+        "name": "Deal count"
+      },
+      "rank": {
+        "name": "Beer #{rank}"
+      },
+      "brand": {
+        "name": "{brand}"
+      }
+    },
+    "binary_sensor": {
+      "cheap_beer": {
+        "name": "Cheap beer below limit"
+      }
+    },
+    "button": {
+      "refresh": {
+        "name": "Refresh deals"
+      }
+    }
+  },
+  "services": {
+    "refresh": {
+      "name": "Refresh",
+      "description": "Download beer deals right now."
+    }
+  }
+}

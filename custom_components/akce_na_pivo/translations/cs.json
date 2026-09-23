@@ -1,0 +1,98 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Akce na pivo",
+        "description": "Vyberte značky piva (nebo napište vlastní a potvrďte Enterem), odkud počítat vzdálenost a kdy se mají akce kontrolovat. Data jsou z kupi.cz, pobočky z OpenStreetMap.",
+        "data": {
+          "name": "Název",
+          "brands": "Značky piva",
+          "location_entity": "Poloha (osoba / telefon / zóna) – prázdné = domov HA",
+          "update_time": "Čas denní kontroly",
+          "update_interval_hours": "Navíc kontrolovat každých N hodin (0 = jen denně)",
+          "top_count": "Kolik nejlevnějších nabídek zobrazit",
+          "sort_by": "Řadit podle",
+          "max_distance_km": "Hledat pobočky do vzdálenosti",
+          "require_nearby_store": "Zobrazit jen obchody, které mají pobočku v okolí",
+          "price_alert": "Upozornit, když 0,5 l stojí méně než",
+          "include_upcoming": "Zahrnout i akce, které teprve začnou",
+          "exclude_loyalty": "Vynechat akce jen s věrnostní kartou/aplikací",
+          "exclude_nonalcoholic": "Vynechat nealko pivo",
+          "max_pages": "Max. počet stránek kupi.cz ke stažení"
+        }
+      }
+    },
+    "error": {
+      "no_brands": "Vyberte nebo zadejte alespoň jednu značku."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Akce na pivo – nastavení",
+        "data": {
+          "brands": "Značky piva",
+          "location_entity": "Poloha (osoba / telefon / zóna) – prázdné = domov HA",
+          "update_time": "Čas denní kontroly",
+          "update_interval_hours": "Navíc kontrolovat každých N hodin (0 = jen denně)",
+          "top_count": "Kolik nejlevnějších nabídek zobrazit",
+          "sort_by": "Řadit podle",
+          "max_distance_km": "Hledat pobočky do vzdálenosti",
+          "require_nearby_store": "Zobrazit jen obchody, které mají pobočku v okolí",
+          "price_alert": "Upozornit, když 0,5 l stojí méně než",
+          "include_upcoming": "Zahrnout i akce, které teprve začnou",
+          "exclude_loyalty": "Vynechat akce jen s věrnostní kartou/aplikací",
+          "exclude_nonalcoholic": "Vynechat nealko pivo",
+          "max_pages": "Max. počet stránek kupi.cz ke stažení"
+        }
+      }
+    },
+    "error": {
+      "no_brands": "Vyberte nebo zadejte alespoň jednu značku."
+    }
+  },
+  "selector": {
+    "sort_by": {
+      "options": {
+        "unit": "Cena za 0,5 l (nejvýhodnější)",
+        "price": "Cena za balení",
+        "distance": "Nejbližší obchod"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "cheapest": {
+        "name": "Nejlevnější pivo"
+      },
+      "per_half_liter": {
+        "name": "Nejlevnější pivo za 0,5 l"
+      },
+      "count": {
+        "name": "Počet akcí"
+      },
+      "rank": {
+        "name": "Pivo #{rank}"
+      },
+      "brand": {
+        "name": "{brand}"
+      }
+    },
+    "binary_sensor": {
+      "cheap_beer": {
+        "name": "Levné pivo pod limitem"
+      }
+    },
+    "button": {
+      "refresh": {
+        "name": "Aktualizovat akce"
+      }
+    }
+  },
+  "services": {
+    "refresh": {
+      "name": "Aktualizovat",
+      "description": "Okamžitě znovu stáhne akce na pivo."
+    }
+  }
+}
