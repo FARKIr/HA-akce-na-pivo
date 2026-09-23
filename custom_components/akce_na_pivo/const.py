@@ -192,6 +192,12 @@ KUPI_BASE_URL = "https://www.kupi.cz"
 KUPI_SEARCH_URL = "https://www.kupi.cz/hledej?f={query}"
 KUPI_PRODUCT_URL = "https://www.kupi.cz/sleva/{slug}"
 
+# Integrace pracuje jen s Českou republikou
+COUNTRY_CODE = "CZ"
+CURRENCY_CODE = "CZK"
+# hrubý obdélník kolem ČR (lat_min, lat_max, lon_min, lon_max); přesnou hranici řeší Overpass area
+CZ_BBOX = (48.55, 51.06, 12.09, 18.86)
+
 OVERPASS_URLS = (
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",

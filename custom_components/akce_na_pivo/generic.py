@@ -18,7 +18,7 @@ from urllib.parse import parse_qs, urljoin, urlparse
 
 from bs4 import BeautifulSoup, Tag
 
-from .const import CHAIN_ALIASES, CHAIN_NAMES
+from .const import CHAIN_ALIASES, CHAIN_NAMES, CURRENCY_CODE
 from .kupi import (
     build_offer,
     clean_text,
@@ -165,6 +165,22 @@ def _date(value: Any) -> date | None:
         return None
 
 
+CURRENCY_KEYS = ("priceCurrency", "currency", "currencyCode", "mena")
+
+
+def _foreign_currency(*objs: Any) -> bool:
+    """True, když nabídka výslovně uvádí jinou měnu než Kč (akce mimo ČR)."""
+    for obj in objs:
+        if not isinstance(obj, dict):
+            continue
+        value = _first(obj, CURRENCY_KEYS)
+        if isinstance(value, dict):
+            value = _first(value, ("code", "name", "symbol"))
+        if value and normalize(str(value)) not in (CURRENCY_CODE.lower(), "kc", "czk"):
+            return True
+    return False
+
+
 def _first(obj: dict, keys: tuple[str, ...]) -> Any:
     for key in keys:
         if key in obj and obj[key] not in (None, "", [], {}):
@@ -276,6 +292,8 @@ def parse_jsonld(
             for offer in raw if isinstance(raw, list) else []:
                 if not isinstance(offer, dict):
                     continue
+                if _foreign_currency(offer, product.get("offers")):
+                    continue
                 shop = _name_of(offer.get("offeredBy") or offer.get("seller")) or fallback_shop
                 price = _price(offer.get("price") or offer.get("lowPrice"))
                 if not shop or price is None:
@@ -335,6 +353,10 @@ def parse_embedded_json(
             name = _first(obj, NAME_KEYS)
             price = _price(_first(obj, PRICE_KEYS))
             if not isinstance(name, str) or price is None:
+                continue
+            if _foreign_currency(
+                obj, obj.get("price") if isinstance(obj.get("price"), dict) else None
+            ):
                 continue
             shop = _name_of(_first(obj, SHOP_KEYS)) or fallback_shop
             if not shop:

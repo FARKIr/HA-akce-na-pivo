@@ -121,3 +121,26 @@ def test_detect_chain():
     assert detect_chain("Penny Market") == "Penny"
     assert detect_chain("Normální pivo") is None
     assert detect_chain("TRAVEL FREE") == "Travel Free"
+
+
+def test_foreign_currency_is_skipped():
+    data = [
+        {"name": "Zlatý Bažant 0,5 l", "price": 0.99, "currency": "EUR", "shop": "Lidl"},
+        {"name": "Kozel 11 0,5 l", "price": 15.9, "currency": "CZK", "shop": "Lidl"},
+    ]
+    html = f'<script type="application/json">{json.dumps({"items": data})}</script>'
+    offers = parse_generic(html, "https://example.cz/pivo", TODAY, "custom")
+    assert [o["product"] for o in offers] == ["Kozel 11 0,5 l"]
+
+    ld = {
+        "@type": "Product",
+        "name": "Pilsner Urquell",
+        "offers": {
+            "@type": "Offer",
+            "price": "1.49",
+            "priceCurrency": "EUR",
+            "seller": {"name": "Tesco"},
+        },
+    }
+    html = f'<script type="application/ld+json">{json.dumps(ld)}</script>'
+    assert parse_generic(html, "https://example.sk/pivo", TODAY, "custom") == []

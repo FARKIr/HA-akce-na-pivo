@@ -1,6 +1,7 @@
 """Test nastavení integrace v Home Assistantu (spustí se, jen když je HA nainstalovaný)."""
 
 import re
+from unittest.mock import patch
 
 import pytest
 
@@ -55,6 +56,21 @@ OVERPASS = {
             "lat": 50.09,
             "lon": 14.45,
             "tags": {"shop": "supermarket", "brand": "Penny", "name": "Penny"},
+        },
+        # pobočky v zahraničí se musí zahodit (Penny v DE je blíž než ta v Praze)
+        {
+            "type": "node",
+            "id": 4,
+            "lat": 50.088,
+            "lon": 14.422,
+            "tags": {"shop": "supermarket", "brand": "Penny", "addr:country": "DE"},
+        },
+        {
+            "type": "node",
+            "id": 5,
+            "lat": 48.2,
+            "lon": 16.37,
+            "tags": {"shop": "supermarket", "brand": "Albert"},
         },
     ]
 }
@@ -130,6 +146,11 @@ async def test_flow_and_setup(hass: HomeAssistant, aioclient_mock, hass_client) 
     assert cheapest.attributes["source_names"]["kompasslev"] == "Kompas Slev"
     assert float(cheapest.state) == 14.9
     assert top[0]["address"] == "Seifertova 1, 13000 Praha"
+    assert top[0]["latitude"] == 50.09  # ne bližší Penny v DE
+    overpass_query = next(
+        c[2]["data"] for c in aioclient_mock.mock_calls if "overpass" in str(c[1])
+    )
+    assert 'area["ISO3166-1"="CZ"]' in overpass_query
     assert top[2]["address"] == "Vodičkova 10, 11000 Praha"
     assert top[2]["distance_km"] < 2
     assert "Končí dnes" in top[0]["flags"]
@@ -153,6 +174,14 @@ async def test_flow_and_setup(hass: HomeAssistant, aioclient_mock, hass_client) 
     resp = await client.get("/akce_na_pivo/akce-na-pivo-card.js")
     assert resp.status == 200
     assert "akce-na-pivo-card" in await resp.text()
+
+    # telefon v zahraničí -> vzdálenosti se počítají od domova v ČR
+    coordinator = hass.config_entries.async_entries(DOMAIN)[0].runtime_data
+    hass.states.async_set("person.test", "not_home", {"latitude": 45.8, "longitude": 15.97})
+    with_entity = {**coordinator.options, "location_entity": "person.test"}
+    with patch.object(type(coordinator), "options", new=property(lambda self: with_entity)):
+        lat, lon, source = coordinator.current_location()
+    assert (lat, lon) == (50.087, 14.421) and "mimo ČR" in source
 
     # opakovaná aktualizace nesmí znovu poslat stejnou událost
     await hass.services.async_call(DOMAIN, "refresh", {}, blocking=True)

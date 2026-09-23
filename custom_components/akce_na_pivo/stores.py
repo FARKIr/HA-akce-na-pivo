@@ -9,7 +9,14 @@ from typing import Any
 
 import aiohttp
 
-from .const import CHAIN_ALIASES, NOMINATIM_REVERSE_URL, OSM_USER_AGENT, OVERPASS_URLS
+from .const import (
+    CHAIN_ALIASES,
+    COUNTRY_CODE,
+    CZ_BBOX,
+    NOMINATIM_REVERSE_URL,
+    OSM_USER_AGENT,
+    OVERPASS_URLS,
+)
 from .kupi import normalize
 
 _LOGGER = logging.getLogger(__name__)
@@ -21,6 +28,14 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     lat1, lon1, lat2, lon2 = map(radians, (lat1, lon1, lat2, lon2))
     a = sin((lat2 - lat1) / 2) ** 2 + cos(lat1) * cos(lat2) * sin((lon2 - lon1) / 2) ** 2
     return 6371.0 * 2 * asin(sqrt(a))
+
+
+def in_czech_republic(lat: float | None, lon: float | None) -> bool:
+    """Hrubá kontrola, zda souřadnice leží v obdélníku kolem ČR."""
+    if lat is None or lon is None:
+        return False
+    lat_min, lat_max, lon_min, lon_max = CZ_BBOX
+    return lat_min <= lat <= lat_max and lon_min <= lon <= lon_max
 
 
 def format_address(tags: dict[str, str]) -> str:
@@ -46,9 +61,11 @@ async def fetch_stores(
 ) -> list[dict[str, Any]]:
     """Stáhne obchody v okolí (jedním dotazem) a přiřadí je k řetězcům."""
     radius_m = int(max(1.0, radius_km) * 1000)
+    # jen obchody uvnitř hranic ČR (u hranic by jinak přišly i pobočky v DE/AT/PL/SK)
     query = (
-        "[out:json][timeout:40];"
-        f'nwr["shop"~"^({SHOP_TYPES})$"](around:{radius_m},{lat},{lon});'
+        "[out:json][timeout:60];"
+        f'area["ISO3166-1"="{COUNTRY_CODE}"][admin_level=2]->.cz;'
+        f'nwr["shop"~"^({SHOP_TYPES})$"](area.cz)(around:{radius_m},{lat},{lon});'
         "out center tags;"
     )
     last_error: Exception | None = None
@@ -75,9 +92,12 @@ async def fetch_stores(
         chain = store_chain(tags)
         if not chain:
             continue
+        country = (tags.get("addr:country") or COUNTRY_CODE).upper()
+        if country != COUNTRY_CODE:
+            continue
         s_lat = element.get("lat") or (element.get("center") or {}).get("lat")
         s_lon = element.get("lon") or (element.get("center") or {}).get("lon")
-        if s_lat is None or s_lon is None:
+        if s_lat is None or s_lon is None or not in_czech_republic(s_lat, s_lon):
             continue
         stores.append(
             {

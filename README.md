@@ -9,6 +9,14 @@ Lovelace karta `akce-na-pivo-card`.
   Makro, Norma, COOP, JIP, Hruška…). Stejná akce nalezená na víc webech se sloučí.
 - Pobočky, adresy a otevírací doby z OpenStreetMap (Overpass + Nominatim)
 
+## Jen Česká republika
+
+Integrace hledá akce a obchody **jen v ČR**:
+- pobočky z OpenStreetMap se berou jen uvnitř hranic ČR (Overpass `area["ISO3166-1"="CZ"]`),
+  takže u hranic se nenabídne Lidl v Německu nebo Penny v Rakousku,
+- když je sledovaný telefon nebo osoba v zahraničí, vzdálenosti se počítají od domova HA,
+- nabídky s jinou měnou než Kč (třeba ze slovenských webů ve vlastních URL) se zahodí.
+
 ## Zdroje akcí
 
 | Zdroj | Jak se čte | Výchozí adresy |

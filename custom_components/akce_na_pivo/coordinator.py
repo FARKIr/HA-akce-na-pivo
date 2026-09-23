@@ -33,6 +33,7 @@ from .const import (
     CONF_SORT_BY,
     CONF_SOURCES,
     CONF_TOP_COUNT,
+    COUNTRY_CODE,
     DEFAULT_BRANDS,
     DEFAULT_EXCLUDE_LOYALTY,
     DEFAULT_EXCLUDE_NONALCOHOLIC,
@@ -61,7 +62,13 @@ from .const import (
 )
 from .generic import dedupe, parse_generic
 from .kupi import match_brand, normalize, parse_offers
-from .stores import fetch_stores, haversine_km, nearest_store, reverse_geocode
+from .stores import (
+    fetch_stores,
+    haversine_km,
+    in_czech_republic,
+    nearest_store,
+    reverse_geocode,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -136,8 +143,18 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 lat = state.attributes.get("latitude")
                 lon = state.attributes.get("longitude")
                 if lat is not None and lon is not None:
-                    return float(lat), float(lon), entity_id
+                    if in_czech_republic(float(lat), float(lon)):
+                        return float(lat), float(lon), entity_id
+                    # akce jsou jen v ČR – v zahraničí počítáme vzdálenost od domova
+                    _LOGGER.debug("%s je mimo ČR, používám domov", entity_id)
+                    return (
+                        self.hass.config.latitude,
+                        self.hass.config.longitude,
+                        "zone.home (poloha mimo ČR)",
+                    )
             _LOGGER.debug("Entita %s nemá polohu, používám domov", entity_id)
+        if not in_czech_republic(self.hass.config.latitude, self.hass.config.longitude):
+            _LOGGER.warning("Domov Home Assistantu leží mimo ČR – obchody se hledají jen v ČR")
         return self.hass.config.latitude, self.hass.config.longitude, "zone.home"
 
     # ---------------------------------------------------------------- storage
@@ -323,6 +340,7 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 age < timedelta(days=STORE_CACHE_DAYS)
                 and moved < RELOCATE_DISTANCE_KM
                 and cache.get("radius") == radius
+                and cache.get("country") == COUNTRY_CODE
             )
         if fresh:
             return cache.get("items", [])
@@ -336,6 +354,7 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "lat": lat,
             "lon": lon,
             "radius": radius,
+            "country": COUNTRY_CODE,
             "items": items,
             "geocoded": cache.get("geocoded", {}) if cache else {},
         }
