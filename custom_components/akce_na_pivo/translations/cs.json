@@ -3,10 +3,12 @@
     "step": {
       "user": {
         "title": "Akce na pivo",
-        "description": "Vyberte značky piva (nebo napište vlastní a potvrďte Enterem), odkud počítat vzdálenost a kdy se mají akce kontrolovat. Data jsou z kupi.cz, pobočky z OpenStreetMap.",
+        "description": "Vyberte značky piva (nebo napište vlastní a potvrďte Enterem), zdroje akcí (Kupi.cz, Kompas Slev, AkcniCeny.cz, Cenito, případně vlastní URL), odkud počítat vzdálenost a kdy se mají akce kontrolovat. Pobočky se hledají v OpenStreetMap.",
         "data": {
           "name": "Název",
           "brands": "Značky piva",
+          "sources": "Zdroje akcí",
+          "custom_urls": "Vlastní URL stránek s akcemi (jedna na řádek, lze použít {query} a {slug})",
           "location_entity": "Poloha (osoba / telefon / zóna) – prázdné = domov HA",
           "update_time": "Čas denní kontroly",
           "update_interval_hours": "Navíc kontrolovat každých N hodin (0 = jen denně)",
@@ -32,6 +34,8 @@
         "title": "Akce na pivo – nastavení",
         "data": {
           "brands": "Značky piva",
+          "sources": "Zdroje akcí",
+          "custom_urls": "Vlastní URL stránek s akcemi (jedna na řádek, lze použít {query} a {slug})",
           "location_entity": "Poloha (osoba / telefon / zóna) – prázdné = domov HA",
           "update_time": "Čas denní kontroly",
           "update_interval_hours": "Navíc kontrolovat každých N hodin (0 = jen denně)",

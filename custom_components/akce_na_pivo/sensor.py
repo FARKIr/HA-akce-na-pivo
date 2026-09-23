@@ -77,6 +77,10 @@ class CheapestBeerSensor(BeerEntity, SensorEntity):
                 "location": data.get("location"),
                 "updated": data.get("updated"),
                 "total_found": data.get("total_found"),
+                "source_names": {
+                    key: status.get("name") for key, status in (data.get("sources") or {}).items()
+                },
+                "by_source": data.get("by_source"),
             }
         )
         return attrs
@@ -130,7 +134,14 @@ class OfferCountSensor(BeerEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         data = self.coordinator.data or {}
-        return {"updated": data.get("updated"), "upcoming": len(data.get("upcoming", []))}
+        return {
+            "updated": data.get("updated"),
+            "upcoming": len(data.get("upcoming", [])),
+            "total_found": data.get("total_found"),
+            "matching_by_source": data.get("by_source"),
+            # stav jednotlivých zdrojů – pomůže, když některý web změní adresy
+            "sources": data.get("sources"),
+        }
 
 
 class RankSensor(BeerEntity, SensorEntity):

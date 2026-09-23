@@ -3,10 +3,12 @@
     "step": {
       "user": {
         "title": "Akce na pivo",
-        "description": "Pick beer brands (or type your own and press Enter), where to measure distance from and when to check the deals. Deals come from kupi.cz, stores from OpenStreetMap.",
+        "description": "Pick beer brands (or type your own and press Enter), deal sources (Kupi.cz, Kompas Slev, AkcniCeny.cz, Cenito or custom URLs), where to measure distance from and when to check the deals. Stores come from OpenStreetMap.",
         "data": {
           "name": "Name",
           "brands": "Beer brands",
+          "sources": "Deal sources",
+          "custom_urls": "Custom deal page URLs (one per line, {query} and {slug} placeholders allowed)",
           "location_entity": "Location (person / device tracker / zone) – empty = HA home",
           "update_time": "Daily check time",
           "update_interval_hours": "Additionally check every N hours (0 = daily only)",
@@ -32,6 +34,8 @@
         "title": "Beer deals – options",
         "data": {
           "brands": "Beer brands",
+          "sources": "Deal sources",
+          "custom_urls": "Custom deal page URLs (one per line, {query} and {slug} placeholders allowed)",
           "location_entity": "Location (person / device tracker / zone) – empty = HA home",
           "update_time": "Daily check time",
           "update_interval_hours": "Additionally check every N hours (0 = daily only)",

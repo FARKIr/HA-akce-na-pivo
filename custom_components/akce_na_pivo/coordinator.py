@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import date, datetime, timedelta
 from typing import Any
 from urllib.parse import quote_plus
@@ -15,10 +16,12 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
+from homeassistant.util import slugify
 
 from .const import (
     ALL_BRANDS,
     CONF_BRANDS,
+    CONF_CUSTOM_URLS,
     CONF_EXCLUDE_LOYALTY,
     CONF_EXCLUDE_NONALCOHOLIC,
     CONF_INCLUDE_UPCOMING,
@@ -28,6 +31,7 @@ from .const import (
     CONF_PRICE_ALERT,
     CONF_REQUIRE_NEARBY_STORE,
     CONF_SORT_BY,
+    CONF_SOURCES,
     CONF_TOP_COUNT,
     DEFAULT_BRANDS,
     DEFAULT_EXCLUDE_LOYALTY,
@@ -38,29 +42,36 @@ from .const import (
     DEFAULT_PRICE_ALERT,
     DEFAULT_REQUIRE_NEARBY_STORE,
     DEFAULT_SORT_BY,
+    DEFAULT_SOURCES,
     DEFAULT_TOP_COUNT,
     DOMAIN,
     EVENT_CHEAP_BEER,
     HISTORY_DAYS,
     KNOWN_BRANDS,
-    KUPI_CATEGORY_URLS,
     KUPI_PRODUCT_URL,
     KUPI_SEARCH_URL,
     RELOCATE_DISTANCE_KM,
     SORT_DISTANCE,
     SORT_PRICE,
+    SOURCE_CUSTOM,
+    SOURCE_KUPI,
+    SOURCES,
     STORE_CACHE_DAYS,
     USER_AGENT,
 )
-from .kupi import match_brand, normalize, parse_jsonld_offers, parse_offers
+from .generic import dedupe, parse_generic
+from .kupi import match_brand, normalize, parse_offers
 from .stores import fetch_stores, haversine_km, nearest_store, reverse_geocode
 
 _LOGGER = logging.getLogger(__name__)
 
-KUPI_HEADERS = {
+REQUEST_DELAY = 0.7
+DEAD_URL_DAYS = 7
+
+HTTP_HEADERS = {
     "User-Agent": USER_AGENT,
     "Accept-Language": "cs-CZ,cs;q=0.9,en;q=0.8",
-    "Accept": "text/html,application/xhtml+xml",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
 
 
@@ -95,6 +106,7 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._raw_offers: list[dict[str, Any]] = []
         self._last_relocate: datetime | None = None
         self._lock = asyncio.Lock()
+        self._status: dict[str, dict[str, Any]] = {}
 
     # ------------------------------------------------------------------ config
     @property
@@ -138,69 +150,165 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_save(self) -> None:
         await self._store.async_save(self._cache)
 
-    # ------------------------------------------------------------------ kupi
-    async def _fetch_html(self, url: str) -> str | None:
+    # ---------------------------------------------------------------- zdroje
+    @property
+    def sources(self) -> list[str]:
+        sources = self.opt(CONF_SOURCES, DEFAULT_SOURCES)
+        return [s for s in sources if s in SOURCES]
+
+    @property
+    def custom_urls(self) -> list[str]:
+        raw = self.options.get(CONF_CUSTOM_URLS) or ""
+        if isinstance(raw, list):
+            raw = "\n".join(raw)
+        return [u.strip() for u in re.split(r"[\n,; ]+", raw) if u.strip().startswith("http")]
+
+    def _brand_queries(self) -> list[tuple[str, str, str]]:
+        """(značka, text pro vyhledání, slug) pro vybrané značky."""
+        result = []
+        for brand in self.brands:
+            if brand == ALL_BRANDS:
+                continue
+            query = brand.split("(")[0].strip()
+            kupi_slug = KNOWN_BRANDS.get(brand, ((), ""))[1]
+            slug = (
+                kupi_slug.removeprefix("pivo-") if kupi_slug else slugify(query).replace("_", "-")
+            )
+            result.append((brand, query, slug))
+        return result
+
+    def _is_dead(self, template: str) -> bool:
+        dead = self._cache.setdefault("dead_urls", {})
+        until = dead.get(template)
+        return bool(until and until > dt_util.now().date().isoformat())
+
+    def _mark_dead(self, template: str) -> None:
+        until = dt_util.now().date() + timedelta(days=DEAD_URL_DAYS)
+        self._cache.setdefault("dead_urls", {})[template] = until.isoformat()
+
+    async def _fetch_html(self, url: str) -> tuple[int, str | None]:
         try:
             async with self.session.get(
-                url, headers=KUPI_HEADERS, timeout=aiohttp.ClientTimeout(total=30)
+                url, headers=HTTP_HEADERS, timeout=aiohttp.ClientTimeout(total=30)
             ) as resp:
-                if resp.status == 404:
-                    return None
-                resp.raise_for_status()
-                return await resp.text()
+                if resp.status >= 400:
+                    return resp.status, None
+                return resp.status, await resp.text()
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
             _LOGGER.debug("Stažení %s selhalo: %s", url, err)
-            return None
+            return 0, None
+
+    def _parse(self, source: str, html: str, url: str, today: date) -> list[dict[str, Any]]:
+        if "kupi.cz" in url:
+            offers = parse_offers(html, url, today)
+            if offers:
+                for offer in offers:
+                    offer["source"] = source
+                    offer["sources"] = [source]
+                return offers
+        return parse_generic(html, url, today, source)
 
     async def _fetch_listing(
-        self, base_url: str, max_pages: int, today: date
+        self, source: str, base_url: str, max_pages: int, today: date, template: str | None = None
     ) -> list[dict[str, Any]]:
         offers: list[dict[str, Any]] = []
         seen: set[str] = set()
+        status = self._status[source]
         for page in range(1, max_pages + 1):
             sep = "&" if "?" in base_url else "?"
             url = base_url if page == 1 else f"{base_url}{sep}page={page}"
-            html = await self._fetch_html(url)
+            code, html = await self._fetch_html(url)
+            status["requests"] += 1
             if not html:
+                if page == 1:
+                    status["errors"].append(f"{url}: HTTP {code or 'chyba spojení'}")
+                    if code in (404, 410) and template and source != SOURCE_KUPI:
+                        self._mark_dead(template)
                 break
-            page_offers = [o for o in parse_offers(html, url, today) if o["id"] not in seen]
-            if page == 1 and not page_offers:
-                page_offers = [
-                    o for o in parse_jsonld_offers(html, url, today) if o["id"] not in seen
-                ]
+            page_offers = [o for o in self._parse(source, html, url, today) if o["id"] not in seen]
             if not page_offers:
                 break
             seen.update(o["id"] for o in page_offers)
             offers.extend(page_offers)
-            await asyncio.sleep(0.7)
+            await asyncio.sleep(REQUEST_DELAY)
+        if offers:
+            status["working_urls"].append(base_url)
+        return offers
+
+    async def _first_working(
+        self, source: str, templates: tuple[str, ...], today: date, pages: int = 1, **fmt: str
+    ) -> list[dict[str, Any]]:
+        """Zkouší šablony URL postupně, vrátí nabídky z první funkční."""
+        for template in templates:
+            if self._is_dead(template):
+                continue
+            url = template.format(**fmt) if fmt else template
+            found = await self._fetch_listing(source, url, pages, today, template)
+            if found:
+                return found
+        return []
+
+    async def _fetch_source(self, source: str, today: date) -> list[dict[str, Any]]:
+        spec = SOURCES[source]
+        max_pages = int(self.opt(CONF_MAX_PAGES, DEFAULT_MAX_PAGES)) if spec["pages"] else 1
+        offers = await self._first_working(source, spec["listing"], today, max_pages)
+        if self.all_brands:
+            return offers
+        for brand, query, slug in self._brand_queries():
+            if any(match_brand(o["product"], [brand]) for o in offers):
+                continue
+            templates = spec["brand"]
+            if source == SOURCE_KUPI:
+                kupi_slug = KNOWN_BRANDS.get(brand, ((), ""))[1]
+                templates = ((KUPI_PRODUCT_URL,) if kupi_slug else ()) + (KUPI_SEARCH_URL,)
+                slug = kupi_slug or slug
+            offers += await self._first_working(
+                source, templates, today, 1, query=quote_plus(query), slug=slug
+            )
+        return offers
+
+    async def _fetch_custom(self, today: date) -> list[dict[str, Any]]:
+        offers: list[dict[str, Any]] = []
+        for template in self.custom_urls:
+            if "{query}" in template or "{slug}" in template:
+                queries = self._brand_queries() or [("", "pivo", "pivo")]
+                for _brand, query, slug in queries:
+                    url = template.replace("{query}", quote_plus(query)).replace("{slug}", slug)
+                    offers += await self._fetch_listing(SOURCE_CUSTOM, url, 1, today)
+            else:
+                offers += await self._fetch_listing(SOURCE_CUSTOM, template, 1, today)
         return offers
 
     async def _fetch_offers(self, today: date) -> list[dict[str, Any]]:
-        max_pages = int(self.opt(CONF_MAX_PAGES, DEFAULT_MAX_PAGES))
+        self._status = {
+            key: {
+                "name": SOURCES[key]["name"] if key in SOURCES else "Vlastní URL",
+                "offers": 0,
+                "requests": 0,
+                "working_urls": [],
+                "errors": [],
+            }
+            for key in [*self.sources, *([SOURCE_CUSTOM] if self.custom_urls else [])]
+        }
         offers: list[dict[str, Any]] = []
-        for url in KUPI_CATEGORY_URLS:
-            offers.extend(await self._fetch_listing(url, max_pages, today))
-
-        if not self.all_brands:
-            for brand in self.brands:
-                if any(match_brand(o["product"], [brand]) for o in offers):
-                    continue
-                # značka v kategorii chybí -> zkusíme stránku produktu a vyhledávání
-                slug = KNOWN_BRANDS.get(brand, ((), ""))[1]
-                found: list[dict[str, Any]] = []
-                if slug:
-                    found = await self._fetch_listing(KUPI_PRODUCT_URL.format(slug=slug), 1, today)
-                if not found:
-                    query = brand.split("(")[0].strip()
-                    found = await self._fetch_listing(
-                        KUPI_SEARCH_URL.format(query=quote_plus(query)), 2, today
-                    )
-                offers.extend(found)
-
-        unique: dict[str, dict[str, Any]] = {}
-        for offer in offers:
-            unique.setdefault(offer["id"], offer)
-        return list(unique.values())
+        for source in self.sources:
+            try:
+                found = await self._fetch_source(source, today)
+            except Exception as err:  # noqa: BLE001 - chyba jednoho zdroje nesmí shodit ostatní
+                _LOGGER.warning("Zdroj %s selhal: %s", source, err)
+                self._status[source]["errors"].append(str(err))
+                found = []
+            self._status[source]["offers"] = len(found)
+            offers += found
+        if self.custom_urls:
+            found = await self._fetch_custom(today)
+            self._status[SOURCE_CUSTOM]["offers"] = len(found)
+            offers += found
+        for key, status in self._status.items():
+            status["errors"] = status["errors"][:5]
+            if not status["offers"]:
+                _LOGGER.info("Zdroj %s nevrátil žádné akce: %s", key, status["errors"])
+        return dedupe(offers)
 
     # ---------------------------------------------------------------- stores
     async def _stores_for(self, lat: float, lon: float) -> list[dict[str, Any]]:
@@ -436,6 +544,11 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "top_count": top_count,
             "updated": dt_util.now().isoformat(),
             "total_found": len(offers),
+            "sources": self._status,
+            "by_source": {
+                key: sum(1 for o in current if key in o.get("sources", [o.get("source")]))
+                for key in self._status
+            },
         }
 
     # ---------------------------------------------------------------- update
@@ -445,9 +558,13 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raw = await self._fetch_offers(today)
             if not raw:
                 if self.data:
-                    _LOGGER.warning("kupi.cz nevrátilo žádné akce, ponechávám poslední data")
+                    _LOGGER.warning("Žádný zdroj nevrátil akce, ponechávám poslední data")
                     return self.data
-                raise UpdateFailed("Z kupi.cz se nepodařilo načíst žádné akce na pivo")
+                raise UpdateFailed(
+                    "Nepodařilo se načíst žádné akce na pivo (zdroje: "
+                    + ", ".join(f"{k}: {v['errors'][:1]}" for k, v in self._status.items())
+                    + ")"
+                )
             offers = self._filter(raw, today)
             self._raw_offers = offers
             return await self._process(offers, today)

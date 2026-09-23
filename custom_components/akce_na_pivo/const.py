@@ -100,13 +100,95 @@ CHAIN_ALIASES: dict[str, tuple[str, ...]] = {
     "enapo": ("enapo",),
     "rohlik": ("rohlik",),
     "kosik": ("kosik",),
+    "jip": ("jip",),
+    "travel free": ("travel free",),
+    "tuty": ("tuty",),
+}
+
+# Zobrazované názvy řetězců – podle nich obecný parser pozná obchod v textu stránky
+CHAIN_NAMES: dict[str, str] = {
+    "albert": "Albert",
+    "billa": "Billa",
+    "globus": "Globus",
+    "kaufland": "Kaufland",
+    "lidl": "Lidl",
+    "penny": "Penny",
+    "tesco": "Tesco",
+    "makro": "Makro",
+    "norma": "Norma",
+    "coop": "COOP",
+    "tamda": "Tamda",
+    "flop": "Flop",
+    "hruska": "Hruška",
+    "terno": "Terno",
+    "trefa": "Trefa",
+    "ratio": "Ratio",
+    "brnenka": "Brněnka",
+    "cba": "CBA",
+    "zabka": "Žabka",
+    "jip": "JIP",
+    "travel free": "Travel Free",
+    "tuty": "COOP Tuty",
+    "rohlik": "Rohlik.cz",
+    "kosik": "Košík.cz",
 }
 
 # Online obchody – nemají kamennou pobočku
 ONLINE_SHOPS = ("rohlik", "kosik", "tesco online", "albert online", "online")
 
+# Zdroje akcí. URL šablony: {query} = hledaný text, {slug} = značka ve tvaru "pilsner-urquell".
+# Adresy mimo kupi.cz nešlo při vývoji ověřit – lze je přepsat v nastavení (vlastní URL).
+CONF_SOURCES = "sources"
+CONF_CUSTOM_URLS = "custom_urls"
+SOURCE_KUPI = "kupi"
+SOURCE_KOMPASSLEV = "kompasslev"
+SOURCE_AKCNICENY = "akcniceny"
+SOURCE_CENITO = "cenito"
+SOURCE_CUSTOM = "custom"
+
+SOURCES: dict[str, dict] = {
+    SOURCE_KUPI: {
+        "name": "Kupi.cz",
+        "listing": ("https://www.kupi.cz/slevy/pivo",),
+        "brand": (),
+        "pages": True,
+    },
+    SOURCE_KOMPASSLEV: {
+        "name": "Kompas Slev",
+        "listing": ("https://kompasslev.cz/produkty/pivo", "https://kompasslev.cz/pivo"),
+        "brand": ("https://kompasslev.cz/produkty/{slug}",),
+        "pages": False,
+    },
+    SOURCE_AKCNICENY: {
+        "name": "AkcniCeny.cz",
+        "listing": (
+            "https://www.akcniceny.cz/hledat/?q=pivo",
+            "https://www.akcniceny.cz/vyhledavani/?q=pivo",
+        ),
+        "brand": (
+            "https://www.akcniceny.cz/hledat/?q={query}",
+            "https://www.akcniceny.cz/vyhledavani/?q={query}",
+        ),
+        "pages": False,
+    },
+    SOURCE_CENITO: {
+        "name": "Cenito",
+        "listing": (
+            "https://cenito.cz/hledat?q=pivo",
+            "https://cenito.cz/vyhledavani?q=pivo",
+            "https://cenito.cz/search?q=pivo",
+        ),
+        "brand": (
+            "https://cenito.cz/hledat?q={query}",
+            "https://cenito.cz/vyhledavani?q={query}",
+            "https://cenito.cz/search?q={query}",
+        ),
+        "pages": False,
+    },
+}
+DEFAULT_SOURCES = [SOURCE_KUPI, SOURCE_KOMPASSLEV, SOURCE_AKCNICENY, SOURCE_CENITO]
+
 KUPI_BASE_URL = "https://www.kupi.cz"
-KUPI_CATEGORY_URLS = ("https://www.kupi.cz/slevy/pivo",)
 KUPI_SEARCH_URL = "https://www.kupi.cz/hledej?f={query}"
 KUPI_PRODUCT_URL = "https://www.kupi.cz/sleva/{slug}"
 

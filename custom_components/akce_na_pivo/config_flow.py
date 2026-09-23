@@ -13,6 +13,7 @@ from homeassistant.helpers import selector
 from .const import (
     ALL_BRANDS,
     CONF_BRANDS,
+    CONF_CUSTOM_URLS,
     CONF_EXCLUDE_LOYALTY,
     CONF_EXCLUDE_NONALCOHOLIC,
     CONF_INCLUDE_UPCOMING,
@@ -22,6 +23,7 @@ from .const import (
     CONF_PRICE_ALERT,
     CONF_REQUIRE_NEARBY_STORE,
     CONF_SORT_BY,
+    CONF_SOURCES,
     CONF_TOP_COUNT,
     CONF_UPDATE_INTERVAL_HOURS,
     CONF_UPDATE_TIME,
@@ -34,6 +36,7 @@ from .const import (
     DEFAULT_PRICE_ALERT,
     DEFAULT_REQUIRE_NEARBY_STORE,
     DEFAULT_SORT_BY,
+    DEFAULT_SOURCES,
     DEFAULT_TOP_COUNT,
     DEFAULT_UPDATE_INTERVAL_HOURS,
     DEFAULT_UPDATE_TIME,
@@ -42,6 +45,7 @@ from .const import (
     MAX_TOP_COUNT,
     NAME,
     SORT_OPTIONS,
+    SOURCES,
 )
 
 
@@ -70,6 +74,22 @@ def _schema(values: dict[str, Any], include_name: bool) -> vol.Schema:
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             ),
+            vol.Required(
+                CONF_SOURCES, default=values.get(CONF_SOURCES, DEFAULT_SOURCES)
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(value=key, label=spec["name"])
+                        for key, spec in SOURCES.items()
+                    ],
+                    multiple=True,
+                    mode=selector.SelectSelectorMode.LIST,
+                )
+            ),
+            vol.Optional(
+                CONF_CUSTOM_URLS,
+                description={"suggested_value": values.get(CONF_CUSTOM_URLS, "")},
+            ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
             (
                 vol.Optional(CONF_LOCATION_ENTITY, description={"suggested_value": location})
             ): selector.EntitySelector(
@@ -166,6 +186,9 @@ def _clean(user_input: dict[str, Any]) -> dict[str, Any]:
     for key in (CONF_UPDATE_INTERVAL_HOURS, CONF_TOP_COUNT, CONF_MAX_PAGES):
         if key in data:
             data[key] = int(data[key])
+    if not data.get(CONF_SOURCES) and not data.get(CONF_CUSTOM_URLS):
+        data[CONF_SOURCES] = list(SOURCES)
+    data[CONF_CUSTOM_URLS] = (data.get(CONF_CUSTOM_URLS) or "").strip()
     if not data.get(CONF_LOCATION_ENTITY):
         data.pop(CONF_LOCATION_ENTITY, None)
     return data

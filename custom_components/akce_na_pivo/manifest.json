@@ -1,13 +1,22 @@
 {
   "domain": "akce_na_pivo",
   "name": "Akce na pivo",
-  "codeowners": ["@joshuaaaaa"],
+  "after_dependencies": [
+    "frontend"
+  ],
+  "codeowners": [
+    "@joshuaaaaa"
+  ],
   "config_flow": true,
-  "dependencies": [],
+  "dependencies": [
+    "http"
+  ],
   "documentation": "https://github.com/joshuaaaaa/HA-akce-na-pivo",
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/joshuaaaaa/HA-akce-na-pivo/issues",
-  "requirements": ["beautifulsoup4>=4.12.0"],
-  "version": "1.0.0"
+  "requirements": [
+    "beautifulsoup4>=4.12.0"
+  ],
+  "version": "1.1.0"
 }

@@ -7,6 +7,7 @@ from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_change,
@@ -24,10 +25,20 @@ from .const import (
     SERVICE_REFRESH,
 )
 from .coordinator import BeerDealsCoordinator
+from .frontend import async_register_card
 
 _LOGGER = logging.getLogger(__name__)
 
 type BeerConfigEntry = ConfigEntry[BeerDealsCoordinator]
+
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Zaregistruje Lovelace kartu dodávanou s integrací."""
+    await async_register_card(hass)
+    return True
 
 
 def _loaded_entries(hass: HomeAssistant) -> list[ConfigEntry]:

@@ -5,7 +5,6 @@ Modul nezávisí na Home Assistantu, aby šel snadno testovat.
 
 from __future__ import annotations
 
-import json
 import re
 import unicodedata
 from datetime import date, timedelta
@@ -294,61 +293,6 @@ def parse_offers(html: str, source_url: str, today: date) -> list[dict[str, Any]
     return offers
 
 
-def parse_jsonld_offers(html: str, source_url: str, today: date) -> list[dict[str, Any]]:
-    """Záložní parser – strukturovaná data schema.org na stránce produktu."""
-    soup = BeautifulSoup(html, "html.parser")
-    offers: list[dict[str, Any]] = []
-    for script in soup.select('script[type="application/ld+json"]'):
-        try:
-            data = json.loads(script.string or script.get_text() or "")
-        except (ValueError, TypeError):
-            continue
-        for item in data if isinstance(data, list) else [data]:
-            if not isinstance(item, dict) or item.get("@type") != "Product":
-                continue
-            name = clean_text(item.get("name"))
-            image = item.get("image") or ""
-            if isinstance(image, list):
-                image = image[0] if image else ""
-            aggregate = item.get("offers") or {}
-            inner = aggregate.get("offers") if isinstance(aggregate, dict) else aggregate
-            for offer in inner or []:
-                if not isinstance(offer, dict):
-                    continue
-                shop = offer.get("offeredBy") or offer.get("seller") or ""
-                if isinstance(shop, dict):
-                    shop = shop.get("name", "")
-                try:
-                    price = float(str(offer.get("price")).replace(",", "."))
-                except (TypeError, ValueError):
-                    continue
-                valid_to = None
-                if offer.get("priceValidUntil"):
-                    try:
-                        valid_to = date.fromisoformat(str(offer["priceValidUntil"])[:10])
-                    except ValueError:
-                        valid_to = None
-                offers.append(
-                    build_offer(
-                        product_id=normalize(name),
-                        discount_id="",
-                        name=name,
-                        shop=clean_text(shop),
-                        price=price,
-                        amount="",
-                        unit_text="",
-                        discount=None,
-                        validity=f"do {valid_to.day}. {valid_to.month}." if valid_to else "",
-                        valid_from=today,
-                        valid_to=valid_to,
-                        loyalty=False,
-                        url=source_url,
-                        image=str(image),
-                    )
-                )
-    return offers
-
-
 def build_offer(
     *,
     product_id: str,
@@ -365,15 +309,24 @@ def build_offer(
     loyalty: bool,
     url: str,
     image: str,
+    source: str = "kupi",
+    old_price: float | None = None,
 ) -> dict[str, Any]:
     pieces, volume = parse_volume(amount, name)
     per_liter = parse_unit_price(unit_text)
     total_l = round(pieces * volume, 3) if volume else None
     if per_liter is None and total_l:
         per_liter = round(price / total_l, 2)
-    old_price = round(price / (1 - discount / 100), 2) if discount and 0 < discount < 100 else None
+    if old_price is not None and old_price <= price:
+        old_price = None
+    if old_price is None and discount and 0 < discount < 100:
+        old_price = round(price / (1 - discount / 100), 2)
+    if discount is None and old_price:
+        discount = round((1 - price / old_price) * 100)
     return {
-        "id": f"{normalize(shop)}|{product_id}|{discount_id or price}",
+        "id": f"{source}|{normalize(shop)}|{product_id}|{discount_id or price}",
+        "source": source,
+        "sources": [source],
         "product_id": product_id,
         "product": name,
         "shop": shop,

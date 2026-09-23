@@ -1,10 +1,10 @@
 from datetime import date
 
+from akce_na_pivo.generic import parse_jsonld
 from akce_na_pivo.kupi import (
     chain_key,
     is_nonalcoholic,
     match_brand,
-    parse_jsonld_offers,
     parse_offers,
     parse_unit_price,
     parse_validity,
@@ -81,7 +81,7 @@ def test_jsonld_fallback():
     html = """<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product",
     "name":"Pivo Gambrinus","image":"x.jpg","offers":{"@type":"AggregateOffer","lowPrice":"17.9",
     "offers":[{"@type":"Offer","offeredBy":"Kaufland","price":"17.9","priceCurrency":"CZK","priceValidUntil":"2026-09-30"}]}}</script>"""
-    offers = parse_jsonld_offers(html, "https://www.kupi.cz/sleva/pivo-gambrinus", TODAY)
+    offers = parse_jsonld(html, "https://www.kupi.cz/sleva/pivo-gambrinus", TODAY, "kupi")
     assert len(offers) == 1
     assert offers[0]["shop"] == "Kaufland"
     assert offers[0]["price"] == 17.9

@@ -1,13 +1,11 @@
 /*
- * Akce na pivo – Lovelace karta
- * Samostatná karta pro integraci "akce_na_pivo".
- * Zobrazuje N nejlevnějších akcí na pivo, obchod, adresu, vzdálenost a mapu.
- *
- * Instalace: zkopírujte do /config/www/akce-na-pivo-card.js a přidejte zdroj
- *   url: /local/akce-na-pivo-card.js   type: JavaScript Module
+ * Akce na pivo – Lovelace karta (custom:akce-na-pivo-card)
+ * Dodává ji integrace "akce_na_pivo" a Home Assistant ji načte automaticky
+ * z /akce_na_pivo/akce-na-pivo-card.js – není potřeba přidávat zdroj ručně.
+ * Zobrazuje N nejlevnějších akcí na pivo, obchod, adresu, vzdálenost, zdroj a mapu.
  */
 
-const CARD_VERSION = "1.0.0";
+const CARD_VERSION = "1.1.0";
 const LEAFLET_VERSION = "1.9.4";
 const LEAFLET_JS = `https://cdn.jsdelivr.net/npm/leaflet@${LEAFLET_VERSION}/dist/leaflet.js`;
 const LEAFLET_CSS = `https://cdn.jsdelivr.net/npm/leaflet@${LEAFLET_VERSION}/dist/leaflet.css`;
@@ -88,6 +86,7 @@ class AkceNaPivoCard extends HTMLElement {
       show_flags: true,
       show_upcoming: false,
       show_address: true,
+      show_source: true,
       map_height: 240,
       sort: "",
       ...config,
@@ -188,7 +187,7 @@ class AkceNaPivoCard extends HTMLElement {
           <div class="shop">${esc(o.shop)}${o.amount ? ` · ${esc(o.amount)}` : ""}${o.loyalty ? ` · <ha-icon class="small" icon="mdi:card-account-details-outline"></ha-icon>` : ""}</div>
           ${where ? `<div class="where">${where}</div>` : ""}
           ${o.opening_hours && selected ? `<div class="where">🕒 ${esc(o.opening_hours)}</div>` : ""}
-          <div class="meta">${validity ? `<span class="valid">${validity}</span>` : ""}${flags}</div>
+          <div class="meta">${validity ? `<span class="valid">${validity}</span>` : ""}${flags}${this._sourceChips(o)}</div>
           ${selected ? `<div class="links">
               ${o.map_url ? `<a href="${esc(o.map_url)}" target="_blank" rel="noopener">Mapy.com</a>` : ""}
               ${o.navigate_url ? `<a href="${esc(o.navigate_url)}" target="_blank" rel="noopener">Navigovat</a>` : ""}
@@ -202,6 +201,13 @@ class AkceNaPivoCard extends HTMLElement {
           ${o.price_per_half_liter ? `<div class="unit">${money(o.price_per_half_liter)} / 0,5 l</div>` : ""}
         </div>
       </div>`;
+  }
+
+  _sourceChips(o) {
+    if (!this._config.show_source) return "";
+    const names = this._hass.states[this._config.entity]?.attributes?.source_names || {};
+    const list = o.sources && o.sources.length ? o.sources : o.source ? [o.source] : [];
+    return list.map((s) => `<span class="chip src">${esc(names[s] || s)}</span>`).join("");
   }
 
   _select(index) {
@@ -301,6 +307,7 @@ const STYLE = `
   .valid { font-size:.75em; color: var(--secondary-text-color); padding:2px 0; margin-right:4px; }
   .chip { font-size:.7em; padding:2px 7px; border-radius:10px; background: var(--secondary-background-color); color: var(--primary-text-color); }
   .chip.hot { background:#2e7d32; color:#fff; }
+  .chip.src { background:none; border:1px solid var(--divider-color); color: var(--secondary-text-color); }
   .links { display:flex; gap:12px; margin-top:6px; font-size:.85em; }
   .links a { color: var(--primary-color); text-decoration:none; font-weight:500; }
   .prices { text-align:right; flex:0 0 auto; }
@@ -342,7 +349,7 @@ class AkceNaPivoCardEditor extends HTMLElement {
     }
     this._form.hass = this._hass;
     this._form.schema = EDITOR_SCHEMA;
-    this._form.data = { count: 5, show_map: true, show_images: true, show_flags: true, show_address: true, map_height: 240, ...this._config };
+    this._form.data = { count: 5, show_map: true, show_images: true, show_flags: true, show_address: true, show_source: true, map_height: 240, ...this._config };
   }
 }
 
@@ -356,6 +363,7 @@ const LABELS = {
   show_images: "Obrázky produktů",
   show_address: "Adresa obchodu",
   show_flags: "Štítky (sleva, historické minimum…)",
+  show_source: "Zdroj akce (Kupi, Kompas Slev…)",
   show_upcoming: "Zobrazit připravované akce",
 };
 
@@ -386,6 +394,7 @@ const EDITOR_SCHEMA = [
       { name: "show_images", selector: { boolean: {} } },
       { name: "show_address", selector: { boolean: {} } },
       { name: "show_flags", selector: { boolean: {} } },
+      { name: "show_source", selector: { boolean: {} } },
       { name: "show_upcoming", selector: { boolean: {} } },
     ],
   },

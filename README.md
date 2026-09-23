@@ -5,9 +5,39 @@ Integrace pro Home Assistant, která každý den (nebo v čase, který si nastav
 domovu nebo k poloze vašeho telefonu a ukáže ji **na mapě**. Součástí je samostatná
 Lovelace karta `akce-na-pivo-card`.
 
-- Ceny z [kupi.cz](https://www.kupi.cz/slevy/pivo), tedy z letáků Albert, Billa, Globus, Kaufland,
-  Lidl, Penny, Tesco, Makro, Norma, COOP…
+- Ceny z více webů s letákovými akcemi (Albert, Billa, Globus, Kaufland, Lidl, Penny, Tesco,
+  Makro, Norma, COOP, JIP, Hruška…). Stejná akce nalezená na víc webech se sloučí.
 - Pobočky, adresy a otevírací doby z OpenStreetMap (Overpass + Nominatim)
+
+## Zdroje akcí
+
+| Zdroj | Jak se čte | Výchozí adresy |
+|---|---|---|
+| **Kupi.cz** | vlastní parser stránek kupi.cz + JSON-LD | `/slevy/pivo` (stránkování), `/sleva/pivo-<značka>`, `/hledej?f=<značka>` |
+| **Kompas Slev** | obecný parser | `kompasslev.cz/produkty/pivo`, `kompasslev.cz/produkty/<značka>` |
+| **AkcniCeny.cz** | obecný parser | vyhledávání `pivo` / `<značka>` |
+| **Cenito** | obecný parser | vyhledávání `pivo` / `<značka>` |
+| **Vlastní URL** | obecný parser | libovolné stránky zadané v nastavení |
+
+Zdroje zapínáte a vypínáte v nastavení integrace. **Obecný parser** zkouší postupně:
+1. strukturovaná data schema.org (JSON-LD `Product` / `Offer` / `ItemList`),
+2. JSON vložený do stránky (Next.js `__NEXT_DATA__` a jiný `application/json`),
+3. heuristiku nad HTML: najde nejmenší blok stránky, ve kterém je cena v Kč a název řetězce,
+   a z něj vezme název produktu, starou cenu, slevu, platnost a odkaz.
+
+> ⚠️ Adresy Kompas Slev, AkcniCeny.cz a Cenito se při vývoji nedaly ověřit (weby nebyly
+> z vývojového prostředí dostupné). Když některý zdroj nic nevrací, podívejte se na atribut
+> `sources` senzoru **Počet akcí**. Ukazuje pro každý zdroj počet akcí, funkční URL a chyby.
+> Správnou adresu pak zadejte do **Vlastní URL**. Adresa, která vrátí 404, se týden nezkouší.
+
+**Vlastní URL** (jedna na řádek) může obsahovat zástupné znaky:
+- `{query}` = název značky (`Pilsner+Urquell`), při „všech pivech“ `pivo`
+- `{slug}` = značka ve tvaru `pilsner-urquell`
+
+```text
+https://kompasslev.cz/produkty/pivo?store=kaufland
+https://www.nejaky-web.cz/hledat?q={query}
+```
 
 ## Co umí
 
@@ -41,13 +71,17 @@ Zkopírujte `custom_components/akce_na_pivo` do `/config/custom_components/` a r
 Potom: **Nastavení → Zařízení a služby → Přidat integraci → Akce na pivo**.
 Všechno jde později změnit přes **Konfigurovat**.
 
-## Instalace karty (samostatně)
+## Karta (součást custom component)
 
-1. Zkopírujte `www/akce-na-pivo-card.js` do `/config/www/akce-na-pivo-card.js`.
-2. **Nastavení → Ovládací panely → ⋮ → Zdroje → Přidat zdroj**
-   - URL: `/local/akce-na-pivo-card.js`
-   - Typ: *JavaScript modul*
-3. Obnovte prohlížeč (Ctrl+F5) a přidejte kartu **Akce na pivo**. Má i grafický editor.
+Karta `custom:akce-na-pivo-card` je přibalená přímo v integraci
+(`custom_components/akce_na_pivo/frontend/akce-na-pivo-card.js`). **Nic nekopírujete ani
+nepřidáváte do zdrojů**: integrace ji sama zpřístupní na `/akce_na_pivo/akce-na-pivo-card.js`
+a zaregistruje ji ve frontendu. Po instalaci a restartu stačí obnovit prohlížeč (Ctrl+F5)
+a v ovládacím panelu přidat kartu **Akce na pivo**. Má i grafický editor.
+
+Kdyby se karta v nabídce neobjevila (třeba bez `default_config`), přidejte zdroj ručně:
+**Nastavení → Ovládací panely → ⋮ → Zdroje** → URL `/akce_na_pivo/akce-na-pivo-card.js`,
+typ *JavaScript modul*.
 
 ```yaml
 type: custom:akce-na-pivo-card
@@ -60,6 +94,7 @@ map_height: 240
 show_images: true
 show_address: true
 show_flags: true
+show_source: true   # štítek, ze kterého webu akce pochází
 show_upcoming: false
 ```
 
@@ -77,7 +112,7 @@ zobrazí vložený OpenStreetMap.
 | `sensor.*_<značka>` | cena | nejlevnější akce každé vybrané značky |
 | `binary_sensor.*_levne_pivo_pod_limitem` | on/off | je v akci pivo pod limitem? |
 | `button.*_aktualizovat_akce` | – | okamžitá aktualizace |
-| `sensor.*_pocet_akci` | počet | diagnostika |
+| `sensor.*_pocet_akci` | počet | diagnostika: stav každého zdroje (akce, funkční URL, chyby) |
 
 ### Příklad automatizace – upozornění do mobilu
 
@@ -111,9 +146,10 @@ entities:
 
 ## Poznámky
 
-- Integrace stahuje veřejné stránky kupi.cz šetrně: několik stránek jednou denně, s pauzami mezi požadavky.
-  Když kupi.cz změní vzhled stránek, parser (`kupi.py`) bude potřeba upravit. Jako záložní zdroj
-  slouží strukturovaná data (JSON-LD) na stránce produktu.
+- Integrace stahuje veřejné stránky šetrně: pár stránek jednou denně, s pauzami mezi požadavky.
+  Chyba jednoho zdroje neshodí ostatní. Když kupi.cz změní vzhled stránek, bude potřeba upravit
+  `kupi.py`. Ostatní weby čte obecný parser `generic.py`.
+- XML feed kupi.cz je určený pro obchodní partnery, ne pro veřejné použití, proto ho integrace nepoužívá.
 - Kupi.cz uvádí akce za celý řetězec. Pobočka na mapě je **nejbližší prodejna daného řetězce**,
   konkrétní akce se tam ale může lišit (třeba hypermarket vs. supermarket).
 - Pobočky z OpenStreetMap se ukládají do mezipaměti na 7 dní a obnoví se, když se změní poloha.
@@ -122,7 +158,7 @@ entities:
 
 ```bash
 pip install beautifulsoup4 pytest
-pytest tests/test_kupi.py            # parser bez Home Assistantu
+pytest tests/test_kupi.py tests/test_generic.py   # parsery bez Home Assistantu
 pip install pytest-homeassistant-custom-component
 pytest tests                         # včetně testu integrace
 ```

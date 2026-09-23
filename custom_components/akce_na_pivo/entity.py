@@ -12,6 +12,8 @@ from .coordinator import BeerDealsCoordinator
 
 OFFER_ATTRS = (
     "rank",
+    "source",
+    "sources",
     "brand",
     "product",
     "shop",

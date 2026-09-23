@@ -14,3 +14,4 @@ if PKG not in sys.modules:
     sys.modules[PKG] = package
     importlib.import_module(f"{PKG}.const")
     importlib.import_module(f"{PKG}.kupi")
+    importlib.import_module(f"{PKG}.generic")
