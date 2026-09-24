@@ -104,17 +104,12 @@ Skopírujte adresár `custom_components/akce_na_pivo` do vášho `/config/custom
 Potom: **Nastavenia → Zariadenia a služby → Pridať integráciu → Akcie na pivo**.
 Všetko sa dá neskôr zmeniť cez **Konfigurovať**.
 
-## Karta (súčasť custom component)
+## Karty (súčasť custom component)
 
-Karta `custom:akce-na-pivo-card` je pribalená priamo v integrácii
-(`custom_components/akce_na_pivo/frontend/akce-na-pivo-card.js`). **Nič nekopírujete ani
-nepridávate do zdrojov**: integrácia ju sama sprístupní na `/akce_na_pivo/akce-na-pivo-card.js`
-a zaregistruje ju vo frontende. Po inštalácii a reštarte stačí obnoviť prehliadač (Ctrl+F5)
-a na nástenku pridať kartu **Akcie na pivo**. Má aj grafický editor.
+Integrácia obsahuje dve Lovelace karty v priečinku `frontend/`:
 
-Keby sa karta v ponuke neobjavila (napríklad bez `default_config`), pridajte zdroj ručne:
-**Nastavenia → Ovládacie panely → ⋮ → Zdroje** → URL `/akce_na_pivo/akce-na-pivo-card.js`,
-typ *JavaScript modul*.
+### 1. Karta Akcie na pivo (`custom:akce-na-pivo-card`)
+Základná karta s interaktívnou Leaflet mapou a prehľadom obchodov.
 
 ```yaml
 type: custom:akce-na-pivo-card
@@ -131,9 +126,24 @@ show_source: true   # štítok, z ktorého webu akcia pochádza
 show_upcoming: false
 ```
 
-Kliknutím na ponuku sa na mape zvýrazní predajňa a objavia sa odkazy **Mapy.com**,
-**Navigovať** a **Leták**. Mapa používa Leaflet z CDN. Keď sa nenačíta, karta
-zobrazí vložený OpenStreetMap iframe.
+### 2. Pivná karta (`custom:pivna-karta`)
+Dizajnová karta na pivnom pozadí s penou, stúpajúcimi bublinkami, prepínaním značiek, hrdinským zobrazením „Dnes choď do“, mapou predajne a rebríčkom.
+
+```yaml
+type: custom:pivna-karta
+entity: sensor.akce_na_pivo_nejlevnejsi_pivo
+title: Kam na pivo
+count: 5
+show_brands: true
+show_map: true
+map_height: 180
+show_list: true
+bubbles: true
+```
+
+Obe karty integrácia automaticky zaregistruje vo frontende. Keby sa karta v ponuke neobjavila, pridajte zdroj ručne:
+**Nastavenia → Ovládacie panely → ⋮ → Zdroje** → URL `/akce_na_pivo/pivna-karta.js` (alebo `/config/www/pivna-karta.js`), typ *JavaScript modul*.
+
 
 ## Entity
 
@@ -143,11 +153,30 @@ zobrazí vložený OpenStreetMap iframe.
 | `sensor.*_nejlevnejsi_pivo_za_0_5_l` | € (Kč)/0,5 l | vhodné do grafu histórie |
 | `sensor.*_pivo_1` … `_pivo_N` | cena balenia | majú `latitude`/`longitude`, takže ich zobrazí aj štandardná karta Mapa |
 | `sensor.*_<značka>` | cena | najlacnejšia akcia každej vybranej značky |
+| `sensor.*_kam_po_pivo` | **názov obchodu**, napr. `Kaufland` | kam ísť po celkovo najlacnejšie pivo; atribúty `address`, `distance_km`, `navigate_url`, `product`, `price` a pripravený súhrn `summary` („Kaufland, Trnavská cesta 41, Bratislava (1,2 km): Zlatý Bažant 12 0,5 l za 0,79 € – 0,79 €/0,5 l“) |
+| `sensor.*_kam_po_<značka>` | **názov obchodu** | kam ísť po konkrétnu vybranú značku |
 | `binary_sensor.*_levne_pivo_pod_limitem` | on/off | je v akcii pivo pod limitom? |
 | `button.*_aktualizovat_akce` | – | okamžitá aktualizácia |
 | `sensor.*_pocet_akci` | počet | diagnostika: stav každého zdroja (akcie, funkčné URL, chyby) |
 
-### Príklad automatizácie – upozornenie do mobilu
+### Príklad automatizácie – každé ráno, kam ísť na pivo
+
+```yaml
+automation:
+  - alias: Kam po pivo
+    trigger:
+      - platform: time
+        at: "08:00:00"
+    action:
+      - service: notify.mobile_app_telefon
+        data:
+          title: "🍺 Dnes choď do: {{ states('sensor.akce_na_pivo_kam_po_pivo') }}"
+          message: "{{ state_attr('sensor.akce_na_pivo_kam_po_pivo', 'summary') }}"
+          data:
+            url: "{{ state_attr('sensor.akce_na_pivo_kam_po_pivo', 'navigate_url') }}"
+```
+
+### Príklad automatizácie – upozornenie pri cene pod limitom
 
 ```yaml
 automation:
