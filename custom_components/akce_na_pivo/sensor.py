@@ -15,7 +15,15 @@ from .const import ALL_BRANDS, SORT_PRICE
 from .coordinator import BeerDealsCoordinator
 from .entity import BeerEntity, offer_attributes
 
-CURRENCY = "CZK"
+
+class CurrencyUnit:
+    """Jednotka podle zvolené země – CZK nebo EUR."""
+
+    coordinator: BeerDealsCoordinator
+
+    @property
+    def native_unit_of_measurement(self) -> str:
+        return self.coordinator.currency
 
 
 async def async_setup_entry(
@@ -35,12 +43,11 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class CheapestBeerSensor(BeerEntity, SensorEntity):
+class CheapestBeerSensor(CurrencyUnit, BeerEntity, SensorEntity):
     """Hlavní senzor – nejlevnější nabídka + seznam TOP N pro kartu."""
 
     _attr_icon = "mdi:beer"
     _attr_translation_key = "cheapest"
-    _attr_native_unit_of_measurement = CURRENCY
     _attr_suggested_display_precision = 2
     _unrecorded_attributes = frozenset({"offers", "upcoming", "brands", "location"})
 
@@ -81,17 +88,19 @@ class CheapestBeerSensor(BeerEntity, SensorEntity):
                     key: status.get("name") for key, status in (data.get("sources") or {}).items()
                 },
                 "by_source": data.get("by_source"),
+                "country": data.get("country"),
+                "currency": data.get("currency"),
+                "currency_symbol": data.get("currency_symbol"),
             }
         )
         return attrs
 
 
-class CheapestHalfLiterSensor(BeerEntity, SensorEntity):
+class CheapestHalfLiterSensor(CurrencyUnit, BeerEntity, SensorEntity):
     """Nejnižší cena přepočtená na 0,5 l."""
 
     _attr_icon = "mdi:glass-mug-variant"
     _attr_translation_key = "per_half_liter"
-    _attr_native_unit_of_measurement = CURRENCY
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_suggested_display_precision = 2
 
@@ -144,12 +153,11 @@ class OfferCountSensor(BeerEntity, SensorEntity):
         }
 
 
-class RankSensor(BeerEntity, SensorEntity):
+class RankSensor(CurrencyUnit, BeerEntity, SensorEntity):
     """N-tá nejlevnější nabídka – má polohu obchodu, takže jde na mapu."""
 
     _attr_icon = "mdi:beer-outline"
     _attr_translation_key = "rank"
-    _attr_native_unit_of_measurement = CURRENCY
     _attr_suggested_display_precision = 2
 
     def __init__(self, coordinator: BeerDealsCoordinator, rank: int) -> None:
@@ -177,12 +185,11 @@ class RankSensor(BeerEntity, SensorEntity):
         return attrs
 
 
-class BrandSensor(BeerEntity, SensorEntity):
+class BrandSensor(CurrencyUnit, BeerEntity, SensorEntity):
     """Nejlevnější akce pro konkrétní značku."""
 
     _attr_icon = "mdi:tag-outline"
     _attr_translation_key = "brand"
-    _attr_native_unit_of_measurement = CURRENCY
     _attr_suggested_display_precision = 2
 
     def __init__(self, coordinator: BeerDealsCoordinator, brand: str) -> None:

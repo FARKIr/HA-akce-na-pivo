@@ -11,8 +11,8 @@ import aiohttp
 
 from .const import (
     CHAIN_ALIASES,
-    COUNTRY_CODE,
-    CZ_BBOX,
+    COUNTRIES,
+    DEFAULT_COUNTRY,
     NOMINATIM_REVERSE_URL,
     OSM_USER_AGENT,
     OVERPASS_URLS,
@@ -30,11 +30,11 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 6371.0 * 2 * asin(sqrt(a))
 
 
-def in_czech_republic(lat: float | None, lon: float | None) -> bool:
-    """Hrubá kontrola, zda souřadnice leží v obdélníku kolem ČR."""
+def in_country(lat: float | None, lon: float | None, country: str = DEFAULT_COUNTRY) -> bool:
+    """Hrubá kontrola, zda souřadnice leží v obdélníku kolem dané země (CZ/SK)."""
     if lat is None or lon is None:
         return False
-    lat_min, lat_max, lon_min, lon_max = CZ_BBOX
+    lat_min, lat_max, lon_min, lon_max = COUNTRIES[country]["bbox"]
     return lat_min <= lat <= lat_max and lon_min <= lon <= lon_max
 
 
@@ -57,15 +57,19 @@ def store_chain(tags: dict[str, str]) -> str | None:
 
 
 async def fetch_stores(
-    session: aiohttp.ClientSession, lat: float, lon: float, radius_km: float
+    session: aiohttp.ClientSession,
+    lat: float,
+    lon: float,
+    radius_km: float,
+    country: str = DEFAULT_COUNTRY,
 ) -> list[dict[str, Any]]:
     """Stáhne obchody v okolí (jedním dotazem) a přiřadí je k řetězcům."""
     radius_m = int(max(1.0, radius_km) * 1000)
-    # jen obchody uvnitř hranic ČR (u hranic by jinak přišly i pobočky v DE/AT/PL/SK)
+    # jen obchody uvnitř hranic zvolené země (u hranic by jinak přišly i pobočky v sousední zemi)
     query = (
         "[out:json][timeout:60];"
-        f'area["ISO3166-1"="{COUNTRY_CODE}"][admin_level=2]->.cz;'
-        f'nwr["shop"~"^({SHOP_TYPES})$"](area.cz)(around:{radius_m},{lat},{lon});'
+        f'area["ISO3166-1"="{country}"][admin_level=2]->.land;'
+        f'nwr["shop"~"^({SHOP_TYPES})$"](area.land)(around:{radius_m},{lat},{lon});'
         "out center tags;"
     )
     last_error: Exception | None = None
@@ -92,12 +96,11 @@ async def fetch_stores(
         chain = store_chain(tags)
         if not chain:
             continue
-        country = (tags.get("addr:country") or COUNTRY_CODE).upper()
-        if country != COUNTRY_CODE:
+        if (tags.get("addr:country") or country).upper() != country:
             continue
         s_lat = element.get("lat") or (element.get("center") or {}).get("lat")
         s_lon = element.get("lon") or (element.get("center") or {}).get("lon")
-        if s_lat is None or s_lon is None or not in_czech_republic(s_lat, s_lon):
+        if s_lat is None or s_lon is None or not in_country(s_lat, s_lon, country):
             continue
         stores.append(
             {

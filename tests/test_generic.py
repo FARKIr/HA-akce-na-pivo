@@ -144,3 +144,21 @@ def test_foreign_currency_is_skipped():
     }
     html = f'<script type="application/ld+json">{json.dumps(ld)}</script>'
     assert parse_generic(html, "https://example.sk/pivo", TODAY, "custom") == []
+
+
+def test_slovak_prices_in_euro():
+    html = """
+    <div class="item"><h2>Corgoň 10% svetlé pivo 0,5 l</h2><p>Lidl</p>
+      <del>0,89 €</del> <b>0,55 €</b> <small>1,10 €/l</small> <p>zajtra končí</p></div>
+    <div class="item"><h2>Kozel 11 0,5 l</h2><p>Billa</p><b>19,90 Kč</b></div>
+    """
+    offers = parse_generic(html, "https://www.kimbino.sk/produkty/pivo/", TODAY, "kimbino", "SK")
+    assert len(offers) == 1  # cena v Kč se na Slovensku nebere
+    offer = offers[0]
+    assert offer["shop"] == "Lidl" and offer["currency"] == "EUR"
+    assert offer["price"] == 0.55 and offer["old_price"] == 0.89
+    assert offer["valid_to"] == "2026-09-24"
+    # a naopak – v Česku se euro nebere
+    assert [o["shop"] for o in parse_generic(html, "https://x.cz", TODAY, "custom", "CZ")] == [
+        "Billa"
+    ]

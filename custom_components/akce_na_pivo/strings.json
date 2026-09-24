@@ -3,9 +3,16 @@
     "step": {
       "user": {
         "title": "Akce na pivo",
-        "description": "Pick beer brands (or type your own and press Enter), deal sources (Kupi.cz, Kompas Slev, AkcniCeny.cz, Cenito or custom URLs), where to measure distance from and when to check the deals. Stores come from OpenStreetMap.",
+        "description": "Name the integration and pick a country. Czechia uses Czech deal sites (CZK), Slovakia uses Slovak ones (EUR). Add the integration twice for both.",
         "data": {
           "name": "Name",
+          "country": "Country"
+        }
+      },
+      "settings": {
+        "title": "Akce na pivo – {country}",
+        "description": "Pick beer brands (or type your own and press Enter), deal sites, where to measure distance from and when to check the deals. Stores are looked up in OpenStreetMap within {country} only.",
+        "data": {
           "brands": "Beer brands",
           "sources": "Deal sources",
           "custom_urls": "Custom deal page URLs (one per line, {query} and {slug} placeholders allowed)",
@@ -31,7 +38,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "Beer deals – options",
+        "title": "Beer deals – options ({country})",
         "data": {
           "brands": "Beer brands",
           "sources": "Deal sources",

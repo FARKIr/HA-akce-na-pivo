@@ -5,17 +5,33 @@ Integrace pro Home Assistant, která každý den (nebo v čase, který si nastav
 domovu nebo k poloze vašeho telefonu a ukáže ji **na mapě**. Součástí je samostatná
 Lovelace karta `akce-na-pivo-card`.
 
+- **Česko 🇨🇿 nebo Slovensko 🇸🇰**: zemi vyberete při přidání integrace.
 - Ceny z více webů s letákovými akcemi (Albert, Billa, Globus, Kaufland, Lidl, Penny, Tesco,
-  Makro, Norma, COOP, JIP, Hruška…). Stejná akce nalezená na víc webech se sloučí.
+  Makro, Norma, COOP, JIP, Hruška, na Slovensku COOP Jednota, Terno, Fresh, Kraj, Metro…).
+  Stejná akce nalezená na víc webech se sloučí.
 - Pobočky, adresy a otevírací doby z OpenStreetMap (Overpass + Nominatim)
 
-## Jen Česká republika
+## Česko, nebo Slovensko
 
-Integrace hledá akce a obchody **jen v ČR**:
-- pobočky z OpenStreetMap se berou jen uvnitř hranic ČR (Overpass `area["ISO3166-1"="CZ"]`),
-  takže u hranic se nenabídne Lidl v Německu nebo Penny v Rakousku,
-- když je sledovaný telefon nebo osoba v zahraničí, vzdálenosti se počítají od domova HA,
-- nabídky s jinou měnou než Kč (třeba ze slovenských webů ve vlastních URL) se zahodí.
+Při přidání integrace nejdřív zvolíte **zemi**:
+
+| | 🇨🇿 Česko | 🇸🇰 Slovensko |
+|---|---|---|
+| Weby s akcemi | Kupi.cz, Kompas Slev, AkcniCeny.cz, Cenito | Zlacnene.sk, Kimbino.sk, Letakomat.sk, KdeJeAkcia.sk, Kompas Zliav, Kupino.sk, AkčnéLetáky.sk, Promotheus.sk |
+| Měna senzorů | CZK (Kč) | EUR (€) |
+| Výchozí značky | Pilsner Urquell, Kozel, Gambrinus | Zlatý Bažant, Šariš, Corgoň |
+| Výchozí limit za 0,5 l | 15 Kč | 0,70 € |
+
+- Pobočky z OpenStreetMap se berou **jen uvnitř hranic zvolené země** (Overpass
+  `area["ISO3166-1"="CZ"/"SK"]`). U hranic se tak nenabídne obchod v sousední zemi.
+- Když je sledovaný telefon nebo osoba mimo zvolenou zemi, vzdálenosti se počítají od domova HA.
+- Nabídky v jiné měně (Kč na Slovensku, € v Česku) se zahodí.
+- **Chcete obě země?** Přidejte integraci dvakrát, jednou pro Česko a jednou pro Slovensko.
+  Každá bude mít vlastní senzory i kartu. Když bydlíte u hranic, nastavte u slovenské
+  varianty dostatečnou **vzdálenost poboček** (až 50 km). Obchody se pak hledají na Slovensku
+  v tomto okruhu od vašeho domova v ČR.
+- Slovenské značky v seznamu: Zlatý Bažant, Šariš, Corgoň, Topvar, Smädný mních, Kelt, Steiger,
+  Martiner, Urpiner, Popper (a samozřejmě české značky nebo vlastní).
 
 ## Zdroje akcí
 
@@ -25,16 +41,25 @@ Integrace hledá akce a obchody **jen v ČR**:
 | **Kompas Slev** | obecný parser | `kompasslev.cz/produkty/pivo`, `kompasslev.cz/produkty/<značka>` |
 | **AkcniCeny.cz** | obecný parser | vyhledávání `pivo` / `<značka>` |
 | **Cenito** | obecný parser | vyhledávání `pivo` / `<značka>` |
+| 🇸🇰 **Zlacnene.sk** | obecný parser | `/akciovy-tovar/napoje-alkoholicke/pivo/`, `/akciovy-tovar/znacka-<značka>/` |
+| 🇸🇰 **Kimbino.sk** | obecný parser | `/produkty/pivo/`, `/produkty/<značka>/` |
+| 🇸🇰 **Letakomat.sk** | obecný parser | `/hladat/?q=pivo`, `/hladat/?q=<značka>` |
+| 🇸🇰 **KdeJeAkcia.sk** | obecný parser | `/kde-je-pivo-v-akcii`, `/kde-je-<značka>-v-akcii` |
+| 🇸🇰 **Kompas Zliav** | obecný parser | `kompaszliav.sk/produkty/pivo`, `/produkty/<značka>` |
+| 🇸🇰 **Kupino.sk** | obecný parser | `/akcia/pivo`, `/akcia/<značka>` |
+| 🇸🇰 **AkčnéLetáky.sk** | obecný parser | `/akcie/Pivo`, `/akcie/<značka>` |
+| 🇸🇰 **Promotheus.sk** | obecný parser | `promotheus.sk/pivo`, `promotheus.sk/<značka>` |
 | **Vlastní URL** | obecný parser | libovolné stránky zadané v nastavení |
 
 Zdroje zapínáte a vypínáte v nastavení integrace. **Obecný parser** zkouší postupně:
 1. strukturovaná data schema.org (JSON-LD `Product` / `Offer` / `ItemList`),
 2. JSON vložený do stránky (Next.js `__NEXT_DATA__` a jiný `application/json`),
-3. heuristiku nad HTML: najde nejmenší blok stránky, ve kterém je cena v Kč a název řetězce,
+3. heuristiku nad HTML: najde nejmenší blok stránky, ve kterém je cena (Kč, nebo € na Slovensku) a název řetězce,
    a z něj vezme název produktu, starou cenu, slevu, platnost a odkaz.
 
-> ⚠️ Adresy Kompas Slev, AkcniCeny.cz a Cenito se při vývoji nedaly ověřit (weby nebyly
-> z vývojového prostředí dostupné). Když některý zdroj nic nevrací, podívejte se na atribut
+> ⚠️ Weby se při vývoji nedaly otevřít, takže parser nebyl vyzkoušený na jejich skutečném
+> obsahu. Slovenské adresy a adresa Kompas Slev jsou ověřené přes vyhledávač. Adresy
+> AkcniCeny.cz a Cenito jsou odhad. Když některý zdroj nic nevrací, podívejte se na atribut
 > `sources` senzoru **Počet akcí**. Ukazuje pro každý zdroj počet akcí, funkční URL a chyby.
 > Správnou adresu pak zadejte do **Vlastní URL**. Adresa, která vrátí 404, se týden nezkouší.
 
@@ -115,7 +140,7 @@ zobrazí vložený OpenStreetMap.
 | Entita | Stav | Poznámka |
 |---|---|---|
 | `sensor.*_nejlevnejsi_pivo` | cena za 0,5 l (nebo za balení) | atribut `offers` = TOP N, `upcoming`, `brands`, `location`; zdroj dat pro kartu |
-| `sensor.*_nejlevnejsi_pivo_za_0_5_l` | Kč/0,5 l | vhodné do grafu historie |
+| `sensor.*_nejlevnejsi_pivo_za_0_5_l` | Kč (€)/0,5 l | vhodné do grafu historie |
 | `sensor.*_pivo_1` … `_pivo_N` | cena balení | mají `latitude`/`longitude`, takže je zobrazí i standardní karta Mapa |
 | `sensor.*_<značka>` | cena | nejlevnější akce každé vybrané značky |
 | `binary_sensor.*_levne_pivo_pod_limitem` | on/off | je v akci pivo pod limitem? |
@@ -135,8 +160,8 @@ automation:
         data:
           title: "🍺 {{ trigger.event.data.product }}"
           message: >
-            {{ trigger.event.data.shop }} za {{ trigger.event.data.price }} Kč
-            ({{ trigger.event.data.price_per_half_liter }} Kč/0,5 l),
+            {{ trigger.event.data.shop }} za {{ trigger.event.data.price }} {{ trigger.event.data.currency }}
+            ({{ trigger.event.data.price_per_half_liter }} {{ trigger.event.data.currency }}/0,5 l),
             {{ trigger.event.data.address }} – {{ trigger.event.data.distance_km }} km,
             platí do {{ trigger.event.data.valid_to }}
 ```

@@ -78,10 +78,16 @@ OVERPASS = {
 
 @pytest.fixture(autouse=True)
 def auto_enable(enable_custom_integrations):
-    yield
+    # bez pauz mezi požadavky (se zmrazeným časem by asyncio.sleep nikdy neskončil)
+    with (
+        patch("custom_components.akce_na_pivo.coordinator.REQUEST_DELAY", 0),
+        patch("custom_components.akce_na_pivo.coordinator.NOMINATIM_DELAY", 0),
+    ):
+        yield
 
 
-async def test_flow_and_setup(hass: HomeAssistant, aioclient_mock, hass_client) -> None:
+async def test_flow_and_setup(hass: HomeAssistant, aioclient_mock, hass_client, freezer) -> None:
+    freezer.move_to("2026-09-23 10:00:00+02:00")
     hass.config.latitude, hass.config.longitude = 50.087, 14.421
     aioclient_mock.get("https://www.kupi.cz/slevy/pivo", text=HTML)
     aioclient_mock.get("https://www.kupi.cz/slevy/pivo?page=2", text="<html></html>")
@@ -112,9 +118,12 @@ async def test_flow_and_setup(hass: HomeAssistant, aioclient_mock, hass_client) 
     )
     assert result["type"] is FlowResultType.FORM
     result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"name": "Pivo", "country": "CZ"}
+    )
+    assert result["step_id"] == "settings"
+    result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
-            "name": "Pivo",
             "brands": ["Pilsner Urquell", "Birell (nealko), Moje Pivo"],
             "sources": ["kupi", "kompasslev", "akcniceny", "cenito"],
             "custom_urls": "",
@@ -181,7 +190,7 @@ async def test_flow_and_setup(hass: HomeAssistant, aioclient_mock, hass_client) 
     with_entity = {**coordinator.options, "location_entity": "person.test"}
     with patch.object(type(coordinator), "options", new=property(lambda self: with_entity)):
         lat, lon, source = coordinator.current_location()
-    assert (lat, lon) == (50.087, 14.421) and "mimo ČR" in source
+    assert (lat, lon) == (50.087, 14.421) and "mimo CZ" in source
 
     # opakovaná aktualizace nesmí znovu poslat stejnou událost
     await hass.services.async_call(DOMAIN, "refresh", {}, blocking=True)
@@ -193,3 +202,118 @@ async def test_flow_and_setup(hass: HomeAssistant, aioclient_mock, hass_client) 
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert result["type"] is FlowResultType.FORM
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+SK_HTML = """
+<div class="offer">
+  <h3>Zlatý Bažant 12% svetlý ležiak 0,5 l</h3>
+  <span class="shop">Kaufland</span>
+  <span class="price-old">1,19 €</span> <span class="price">0,69 €</span>
+  <span>platí od 22. 9. do 28. 9.</span>
+</div>
+<div class="offer">
+  <h3>Šariš 10 svetlé pivo 6 x 0,5 l</h3>
+  <span class="shop">COOP Jednota</span>
+  <span class="price">€ 4,49</span>
+  <span>22.9. - 28.9.</span>
+</div>
+"""
+
+SK_OVERPASS = {
+    "elements": [
+        {
+            "type": "node",
+            "id": 10,
+            "lat": 48.15,
+            "lon": 17.11,
+            "tags": {
+                "shop": "supermarket",
+                "brand": "Kaufland",
+                "addr:street": "Trnavská cesta",
+                "addr:housenumber": "41",
+                "addr:city": "Bratislava",
+                "addr:postcode": "82108",
+            },
+        },
+        {
+            "type": "node",
+            "id": 11,
+            "lat": 48.14,
+            "lon": 17.10,
+            "tags": {
+                "shop": "supermarket",
+                "brand": "COOP Jednota",
+                "name": "COOP Jednota",
+                "addr:street": "Obchodná",
+                "addr:housenumber": "1",
+                "addr:city": "Bratislava",
+            },
+        },
+        # pobočka v ČR se pro Slovensko nepoužije
+        {
+            "type": "node",
+            "id": 12,
+            "lat": 48.16,
+            "lon": 17.10,
+            "tags": {"shop": "supermarket", "brand": "Kaufland", "addr:country": "CZ"},
+        },
+    ]
+}
+
+
+async def test_slovakia(hass: HomeAssistant, aioclient_mock, freezer) -> None:
+    freezer.move_to("2026-09-23 10:00:00+02:00")
+    hass.config.latitude, hass.config.longitude = 48.148, 17.107  # Bratislava
+    aioclient_mock.get(
+        "https://www.zlacnene.sk/akciovy-tovar/napoje-alkoholicke/pivo/", text=SK_HTML
+    )
+    aioclient_mock.get(re.compile(r"^https://"), status=404)
+    aioclient_mock.post("https://overpass-api.de/api/interpreter", json=SK_OVERPASS)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"name": "Pivo SK", "country": "SK"}
+    )
+    assert result["step_id"] == "settings"
+    source_options = [o["value"] for o in result["data_schema"].schema["sources"].config["options"]]
+    assert "zlacnene" in source_options and "kupi" not in source_options
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            "brands": ["Zlatý Bažant", "Šariš"],
+            "sources": source_options,
+            "update_time": "07:00:00",
+            "update_interval_hours": 0,
+            "top_count": 5,
+            "sort_by": "unit",
+            "max_distance_km": 15,
+            "require_nearby_store": False,
+            "price_alert": 0.7,
+            "include_upcoming": True,
+            "exclude_loyalty": False,
+            "exclude_nonalcoholic": False,
+            "max_pages": 1,
+        },
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["options"]["country"] == "SK"
+    await hass.async_block_till_done()
+
+    cheapest = hass.states.get("sensor.pivo_sk_cheapest_beer")
+    assert cheapest is not None
+    assert cheapest.attributes["unit_of_measurement"] == "EUR"
+    assert cheapest.attributes["currency_symbol"] == "€"
+    top = cheapest.attributes["offers"]
+    # 0,69 € za 0,5 l vs. multipack 4,49 € / 6 = 0,75 € za 0,5 l
+    assert [o["shop"] for o in top] == ["Kaufland", "COOP"]
+    assert top[0]["price"] == 0.69 and top[0]["old_price"] == 1.19
+    assert (top[0]["valid_from"], top[0]["valid_to"]) == ("2026-09-22", "2026-09-28")
+    assert top[0]["address"] == "Trnavská cesta 41, 82108 Bratislava"
+    assert top[1]["price"] == 4.49 and top[1]["price_per_half_liter"] == 0.75
+    assert all(o["currency"] == "EUR" for o in top)
+    assert "Pod limitem 0.7 €/0,5 l" in top[0]["flags"]
+
+    query = next(c[2]["data"] for c in aioclient_mock.mock_calls if "overpass" in str(c[1]))
+    assert 'area["ISO3166-1"="SK"]' in query

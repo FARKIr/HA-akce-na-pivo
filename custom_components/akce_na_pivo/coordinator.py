@@ -21,6 +21,7 @@ from homeassistant.util import slugify
 from .const import (
     ALL_BRANDS,
     CONF_BRANDS,
+    CONF_COUNTRY,
     CONF_CUSTOM_URLS,
     CONF_EXCLUDE_LOYALTY,
     CONF_EXCLUDE_NONALCOHOLIC,
@@ -33,17 +34,15 @@ from .const import (
     CONF_SORT_BY,
     CONF_SOURCES,
     CONF_TOP_COUNT,
-    COUNTRY_CODE,
-    DEFAULT_BRANDS,
+    COUNTRIES,
+    DEFAULT_COUNTRY,
     DEFAULT_EXCLUDE_LOYALTY,
     DEFAULT_EXCLUDE_NONALCOHOLIC,
     DEFAULT_INCLUDE_UPCOMING,
     DEFAULT_MAX_DISTANCE_KM,
     DEFAULT_MAX_PAGES,
-    DEFAULT_PRICE_ALERT,
     DEFAULT_REQUIRE_NEARBY_STORE,
     DEFAULT_SORT_BY,
-    DEFAULT_SOURCES,
     DEFAULT_TOP_COUNT,
     DOMAIN,
     EVENT_CHEAP_BEER,
@@ -59,13 +58,14 @@ from .const import (
     SOURCES,
     STORE_CACHE_DAYS,
     USER_AGENT,
+    country_sources,
 )
 from .generic import dedupe, parse_generic
 from .kupi import match_brand, normalize, parse_offers
 from .stores import (
     fetch_stores,
     haversine_km,
-    in_czech_republic,
+    in_country,
     nearest_store,
     reverse_geocode,
 )
@@ -73,6 +73,7 @@ from .stores import (
 _LOGGER = logging.getLogger(__name__)
 
 REQUEST_DELAY = 0.7
+NOMINATIM_DELAY = 1.1  # limit Nominatimu 1 dotaz/s
 DEAD_URL_DAYS = 7
 
 HTTP_HEADERS = {
@@ -125,8 +126,29 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return default if value is None or value == "" else value
 
     @property
+    def country(self) -> str:
+        country = self.options.get(CONF_COUNTRY) or DEFAULT_COUNTRY
+        return country if country in COUNTRIES else DEFAULT_COUNTRY
+
+    @property
+    def country_info(self) -> dict[str, Any]:
+        return COUNTRIES[self.country]
+
+    @property
+    def currency(self) -> str:
+        return self.country_info["currency"]
+
+    @property
+    def currency_symbol(self) -> str:
+        return self.country_info["symbol"]
+
+    @property
+    def price_alert(self) -> float:
+        return float(self.opt(CONF_PRICE_ALERT, self.country_info["default_alert"]))
+
+    @property
     def brands(self) -> list[str]:
-        brands = self.opt(CONF_BRANDS, DEFAULT_BRANDS)
+        brands = self.opt(CONF_BRANDS, self.country_info["default_brands"])
         if isinstance(brands, str):
             brands = [b.strip() for b in brands.split(",") if b.strip()]
         return list(brands)
@@ -143,18 +165,19 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 lat = state.attributes.get("latitude")
                 lon = state.attributes.get("longitude")
                 if lat is not None and lon is not None:
-                    if in_czech_republic(float(lat), float(lon)):
+                    if in_country(float(lat), float(lon), self.country):
                         return float(lat), float(lon), entity_id
-                    # akce jsou jen v ČR – v zahraničí počítáme vzdálenost od domova
-                    _LOGGER.debug("%s je mimo ČR, používám domov", entity_id)
+                    # akce jsou jen ve zvolené zemi – mimo ni počítáme vzdálenost od domova
+                    _LOGGER.debug("%s je mimo %s, používám domov", entity_id, self.country)
                     return (
                         self.hass.config.latitude,
                         self.hass.config.longitude,
-                        "zone.home (poloha mimo ČR)",
+                        f"zone.home (poloha mimo {self.country})",
                     )
             _LOGGER.debug("Entita %s nemá polohu, používám domov", entity_id)
-        if not in_czech_republic(self.hass.config.latitude, self.hass.config.longitude):
-            _LOGGER.warning("Domov Home Assistantu leží mimo ČR – obchody se hledají jen v ČR")
+        if not in_country(self.hass.config.latitude, self.hass.config.longitude, self.country):
+            # např. domov v ČR a akce na Slovensku – hledají se pobočky v SK do zvolené vzdálenosti
+            _LOGGER.debug("Domov leží mimo %s – obchody se hledají jen v %s", *[self.country] * 2)
         return self.hass.config.latitude, self.hass.config.longitude, "zone.home"
 
     # ---------------------------------------------------------------- storage
@@ -170,8 +193,9 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # ---------------------------------------------------------------- zdroje
     @property
     def sources(self) -> list[str]:
-        sources = self.opt(CONF_SOURCES, DEFAULT_SOURCES)
-        return [s for s in sources if s in SOURCES]
+        allowed = country_sources(self.country)
+        sources = self.opt(CONF_SOURCES, allowed)
+        return [s for s in sources if s in allowed]
 
     @property
     def custom_urls(self) -> list[str]:
@@ -187,10 +211,7 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if brand == ALL_BRANDS:
                 continue
             query = brand.split("(")[0].strip()
-            kupi_slug = KNOWN_BRANDS.get(brand, ((), ""))[1]
-            slug = (
-                kupi_slug.removeprefix("pivo-") if kupi_slug else slugify(query).replace("_", "-")
-            )
+            slug = slugify(query).replace("_", "-")
             result.append((brand, query, slug))
         return result
 
@@ -223,7 +244,7 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     offer["source"] = source
                     offer["sources"] = [source]
                 return offers
-        return parse_generic(html, url, today, source)
+        return parse_generic(html, url, today, source, self.country)
 
     async def _fetch_listing(
         self, source: str, base_url: str, max_pages: int, today: date, template: str | None = None
@@ -340,12 +361,12 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 age < timedelta(days=STORE_CACHE_DAYS)
                 and moved < RELOCATE_DISTANCE_KM
                 and cache.get("radius") == radius
-                and cache.get("country") == COUNTRY_CODE
+                and cache.get("country") == self.country
             )
         if fresh:
             return cache.get("items", [])
         try:
-            items = await fetch_stores(self.session, lat, lon, radius)
+            items = await fetch_stores(self.session, lat, lon, radius, self.country)
         except RuntimeError as err:
             _LOGGER.warning("%s – používám uložené pobočky", err)
             return cache.get("items", [])
@@ -354,7 +375,7 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "lat": lat,
             "lon": lon,
             "radius": radius,
-            "country": COUNTRY_CODE,
+            "country": self.country,
             "items": items,
             "geocoded": cache.get("geocoded", {}) if cache else {},
         }
@@ -406,7 +427,7 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 geocoded[key] = await reverse_geocode(
                     self.session, offer["latitude"], offer["longitude"]
                 )
-                await asyncio.sleep(1.1)  # limit Nominatimu 1 dotaz/s
+                await asyncio.sleep(NOMINATIM_DELAY)
             offer["address"] = geocoded[key]
 
     # --------------------------------------------------------------- scoring
@@ -443,7 +464,8 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _evaluate(self, offers: list[dict[str, Any]], today: date) -> None:
         history: dict[str, dict[str, float]] = self._cache["history"]
-        alert = float(self.opt(CONF_PRICE_ALERT, DEFAULT_PRICE_ALERT))
+        alert = self.price_alert
+        symbol = self.currency_symbol
         cutoff = (today - timedelta(days=HISTORY_DAYS)).isoformat()
 
         # průměrná cena za 0,5 l pro každou značku (napříč obchody)
@@ -471,11 +493,13 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 else None
             )
             if offer["cheaper_than_avg"] and offer["cheaper_than_avg"] >= 1:
-                flags.append(f"O {offer['cheaper_than_avg']:.2f} Kč/0,5 l levnější než průměr akcí")
+                flags.append(
+                    f"O {offer['cheaper_than_avg']:.2f} {symbol}/0,5 l levnější než průměr akcí"
+                )
             if offer.get("discount_percent") and offer["discount_percent"] >= 30:
                 flags.append(f"Sleva {offer['discount_percent']:g} %")
             if offer.get("price_per_half_liter") and offer["price_per_half_liter"] <= alert:
-                flags.append(f"Pod limitem {alert:g} Kč/0,5 l")
+                flags.append(f"Pod limitem {alert:g} {symbol}/0,5 l")
                 offer["below_alert"] = True
             else:
                 offer["below_alert"] = False
@@ -517,6 +541,8 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         "brand": offer["brand"],
                         "shop": offer["shop"],
                         "price": offer["price"],
+                        "currency": self.currency,
+                        "country": self.country,
                         "price_per_half_liter": offer["price_per_half_liter"],
                         "address": offer.get("address"),
                         "distance_km": offer.get("distance_km"),
@@ -564,6 +590,9 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "updated": dt_util.now().isoformat(),
             "total_found": len(offers),
             "sources": self._status,
+            "country": self.country,
+            "currency": self.currency,
+            "currency_symbol": self.currency_symbol,
             "by_source": {
                 key: sum(1 for o in current if key in o.get("sources", [o.get("source")]))
                 for key in self._status

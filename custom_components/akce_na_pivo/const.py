@@ -69,10 +69,28 @@ KNOWN_BRANDS: dict[str, tuple[tuple[str, ...], str]] = {
     "Birell (nealko)": (("birell",), "pivo-birell"),
     "Heineken": (("heineken",), "pivo-heineken"),
     "Plzeň (vše z Prazdroje)": (("pilsner", "gambrinus", "kozel", "radegast"), ""),
+    # slovenské značky
+    "Zlatý Bažant": (("zlaty bazant", "golden pheasant"), "pivo-zlaty-bazant"),
+    "Šariš": (("saris",), "pivo-saris"),
+    "Corgoň": (("corgon",), "pivo-corgon"),
+    "Topvar": (("topvar",), "pivo-topvar"),
+    "Smädný mních": (("smadny mnich",), "pivo-smadny-mnich"),
+    "Kelt": (("kelt",), "pivo-kelt"),
+    "Steiger": (("steiger",), "pivo-steiger"),
+    "Martiner": (("martiner",), "pivo-martiner"),
+    "Urpiner": (("urpiner",), "pivo-urpiner"),
+    "Popper": (("popper",), "pivo-popper"),
 }
 
 # Slova, podle kterých poznáme nealko pivo (porovnává se s textem bez diakritiky)
-NONALCOHOLIC_WORDS = ("nealko", "birell", "alkohol free", "alcohol free", "bezalkohol")
+NONALCOHOLIC_WORDS = (
+    "nealko",
+    "birell",
+    "alkohol free",
+    "alcohol free",
+    "bezalkohol",
+    "nealkoholicke",
+)
 
 # Názvy obchodních řetězců, jak je uvádí kupi.cz -> klíč pro vyhledání v OpenStreetMap
 CHAIN_ALIASES: dict[str, tuple[str, ...]] = {
@@ -103,6 +121,16 @@ CHAIN_ALIASES: dict[str, tuple[str, ...]] = {
     "jip": ("jip",),
     "travel free": ("travel free",),
     "tuty": ("tuty",),
+    # slovenské řetězce
+    "fresh": ("fresh",),
+    "kraj": ("kraj",),
+    "koruna": ("koruna",),
+    "metro": ("metro",),
+    "klas": ("klas",),
+    "moja samoska": ("moja samoska", "samoska"),
+    "milk agro": ("milk agro", "milk-agro"),
+    "kon rad": ("kon rad", "kon-rad"),
+    "yeme": ("yeme",),
 }
 
 # Zobrazované názvy řetězců – podle nich obecný parser pozná obchod v textu stránky
@@ -131,10 +159,19 @@ CHAIN_NAMES: dict[str, str] = {
     "tuty": "COOP Tuty",
     "rohlik": "Rohlik.cz",
     "kosik": "Košík.cz",
+    "fresh": "Fresh",
+    "kraj": "Kraj",
+    "koruna": "Koruna",
+    "metro": "Metro",
+    "klas": "Klas",
+    "moja samoska": "Moja Samoška",
+    "milk agro": "Milk-Agro",
+    "kon rad": "KON-RAD",
+    "yeme": "Yeme",
 }
 
 # Online obchody – nemají kamennou pobočku
-ONLINE_SHOPS = ("rohlik", "kosik", "tesco online", "albert online", "online")
+ONLINE_SHOPS = ("rohlik", "kosik", "tesco online", "albert online", "online", "kosik.sk")
 
 # Zdroje akcí. URL šablony: {query} = hledaný text, {slug} = značka ve tvaru "pilsner-urquell".
 # Adresy mimo kupi.cz nešlo při vývoji ověřit – lze je přepsat v nastavení (vlastní URL).
@@ -145,21 +182,32 @@ SOURCE_KOMPASSLEV = "kompasslev"
 SOURCE_AKCNICENY = "akcniceny"
 SOURCE_CENITO = "cenito"
 SOURCE_CUSTOM = "custom"
+SOURCE_ZLACNENE = "zlacnene"
+SOURCE_KIMBINO = "kimbino"
+SOURCE_LETAKOMAT = "letakomat"
+SOURCE_KDEJEAKCIA = "kdejeakcia"
+SOURCE_KOMPASZLIAV = "kompaszliav"
+SOURCE_KUPINO = "kupino"
+SOURCE_AKCNELETAKY = "akcneletaky"
+SOURCE_PROMOTHEUS = "promotheus"
 
 SOURCES: dict[str, dict] = {
     SOURCE_KUPI: {
+        "country": "CZ",
         "name": "Kupi.cz",
         "listing": ("https://www.kupi.cz/slevy/pivo",),
         "brand": (),
         "pages": True,
     },
     SOURCE_KOMPASSLEV: {
+        "country": "CZ",
         "name": "Kompas Slev",
         "listing": ("https://kompasslev.cz/produkty/pivo", "https://kompasslev.cz/pivo"),
         "brand": ("https://kompasslev.cz/produkty/{slug}",),
         "pages": False,
     },
     SOURCE_AKCNICENY: {
+        "country": "CZ",
         "name": "AkcniCeny.cz",
         "listing": (
             "https://www.akcniceny.cz/hledat/?q=pivo",
@@ -172,6 +220,7 @@ SOURCES: dict[str, dict] = {
         "pages": False,
     },
     SOURCE_CENITO: {
+        "country": "CZ",
         "name": "Cenito",
         "listing": (
             "https://cenito.cz/hledat?q=pivo",
@@ -185,18 +234,105 @@ SOURCES: dict[str, dict] = {
         ),
         "pages": False,
     },
+    # Slovensko – adresy ověřené přes vyhledávač (září 2026), {slug} = "zlaty-bazant"
+    SOURCE_ZLACNENE: {
+        "country": "SK",
+        "name": "Zlacnene.sk",
+        "listing": ("https://www.zlacnene.sk/akciovy-tovar/napoje-alkoholicke/pivo/",),
+        "brand": ("https://www.zlacnene.sk/akciovy-tovar/znacka-{slug}/",),
+        "pages": False,
+    },
+    SOURCE_KIMBINO: {
+        "country": "SK",
+        "name": "Kimbino.sk",
+        "listing": ("https://www.kimbino.sk/produkty/pivo/",),
+        "brand": ("https://www.kimbino.sk/produkty/{slug}/",),
+        "pages": False,
+    },
+    SOURCE_LETAKOMAT: {
+        "country": "SK",
+        "name": "Letakomat.sk",
+        "listing": ("https://www.letakomat.sk/hladat/?q=pivo",),
+        "brand": ("https://www.letakomat.sk/hladat/?q={slug}",),
+        "pages": False,
+    },
+    SOURCE_KDEJEAKCIA: {
+        "country": "SK",
+        "name": "KdeJeAkcia.sk",
+        "listing": ("https://kdejeakcia.sk/kde-je-pivo-v-akcii",),
+        "brand": ("https://kdejeakcia.sk/kde-je-{slug}-v-akcii",),
+        "pages": False,
+    },
+    SOURCE_KOMPASZLIAV: {
+        "country": "SK",
+        "name": "Kompas Zliav",
+        "listing": ("https://kompaszliav.sk/produkty/pivo",),
+        "brand": ("https://kompaszliav.sk/produkty/{slug}",),
+        "pages": False,
+    },
+    SOURCE_KUPINO: {
+        "country": "SK",
+        "name": "Kupino.sk",
+        "listing": ("https://www.kupino.sk/akcia/pivo",),
+        "brand": ("https://www.kupino.sk/akcia/{slug}",),
+        "pages": False,
+    },
+    SOURCE_AKCNELETAKY: {
+        "country": "SK",
+        "name": "AkčnéLetáky.sk",
+        "listing": ("https://www.akcneletaky.sk/akcie/Pivo",),
+        "brand": ("https://www.akcneletaky.sk/akcie/{query}",),
+        "pages": False,
+    },
+    SOURCE_PROMOTHEUS: {
+        "country": "SK",
+        "name": "Promotheus.sk",
+        "listing": ("https://promotheus.sk/pivo",),
+        "brand": ("https://promotheus.sk/{slug}",),
+        "pages": False,
+    },
 }
-DEFAULT_SOURCES = [SOURCE_KUPI, SOURCE_KOMPASSLEV, SOURCE_AKCNICENY, SOURCE_CENITO]
+
+CONF_COUNTRY = "country"
+COUNTRY_CZ = "CZ"
+COUNTRY_SK = "SK"
+DEFAULT_COUNTRY = COUNTRY_CZ
+
+# Nastavení podle země. bbox = hrubý obdélník (lat_min, lat_max, lon_min, lon_max),
+# přesnou hranici řeší Overpass area.
+COUNTRIES: dict[str, dict] = {
+    COUNTRY_CZ: {
+        "name": "Česká republika",
+        "currency": "CZK",
+        "symbol": "Kč",
+        "currency_aliases": ("czk", "kc", ",-"),
+        "bbox": (48.55, 51.06, 12.09, 18.86),
+        "default_brands": ["Pilsner Urquell", "Kozel", "Gambrinus"],
+        "default_alert": 15.0,
+        "alert_max": 100,
+        "alert_step": 0.1,
+    },
+    COUNTRY_SK: {
+        "name": "Slovensko",
+        "currency": "EUR",
+        "symbol": "€",
+        "currency_aliases": ("eur", "€"),
+        "bbox": (47.73, 49.61, 16.83, 22.57),
+        "default_brands": ["Zlatý Bažant", "Šariš", "Corgoň"],
+        "default_alert": 0.7,
+        "alert_max": 5,
+        "alert_step": 0.01,
+    },
+}
+
+
+def country_sources(country: str) -> list[str]:
+    return [key for key, spec in SOURCES.items() if spec["country"] == country]
+
 
 KUPI_BASE_URL = "https://www.kupi.cz"
 KUPI_SEARCH_URL = "https://www.kupi.cz/hledej?f={query}"
 KUPI_PRODUCT_URL = "https://www.kupi.cz/sleva/{slug}"
-
-# Integrace pracuje jen s Českou republikou
-COUNTRY_CODE = "CZ"
-CURRENCY_CODE = "CZK"
-# hrubý obdélník kolem ČR (lat_min, lat_max, lon_min, lon_max); přesnou hranici řeší Overpass area
-CZ_BBOX = (48.55, 51.06, 12.09, 18.86)
 
 OVERPASS_URLS = (
     "https://overpass-api.de/api/interpreter",
@@ -216,3 +352,6 @@ HISTORY_DAYS = 120
 
 EVENT_CHEAP_BEER = f"{DOMAIN}_levne_pivo"
 SERVICE_REFRESH = "refresh"
+
+
+DEFAULT_SOURCES = country_sources(COUNTRY_CZ)

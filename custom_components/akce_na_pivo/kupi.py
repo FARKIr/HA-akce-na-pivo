@@ -140,10 +140,13 @@ def parse_validity(text: str | None, today: date) -> tuple[date | None, date | N
         return None, None
     if "dnes konci" in norm:
         return today, today
-    if "zitra konci" in norm:
+    if "zitra konci" in norm or "zajtra konci" in norm:
         return today, today + timedelta(days=1)
     if "plati do" in norm or norm.startswith("do "):
         return today, _partial_date(norm, today)
+    both = re.search(r"\bod\s+(.+?)\s+do\s+(.+)", norm)
+    if both:
+        return _partial_date(both.group(1), today), _partial_date(both.group(2), today)
     if norm.startswith("od ") or "plati od" in norm:
         return _partial_date(norm, today), None
     parts = re.split(r"\s+[–-]\s+|\s*[–-]\s*(?=[a-z]{2}\s*\d|\d)", norm, maxsplit=1)
@@ -311,6 +314,7 @@ def build_offer(
     image: str,
     source: str = "kupi",
     old_price: float | None = None,
+    currency: str = "CZK",
 ) -> dict[str, Any]:
     pieces, volume = parse_volume(amount, name)
     per_liter = parse_unit_price(unit_text)
@@ -327,6 +331,7 @@ def build_offer(
         "id": f"{source}|{normalize(shop)}|{product_id}|{discount_id or price}",
         "source": source,
         "sources": [source],
+        "currency": currency,
         "product_id": product_id,
         "product": name,
         "shop": shop,

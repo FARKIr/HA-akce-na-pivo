@@ -4,7 +4,7 @@ Používá se pro Kompas Slev, AkcniCeny.cz, Cenito a vlastní URL zadané uživ
 Zkouší postupně:
   1. strukturovaná data schema.org (JSON-LD: Product / Offer / ItemList),
   2. JSON vložený do stránky (Next.js __NEXT_DATA__, Nuxt, application/json),
-  3. heuristiku nad HTML – nejmenší blok, který obsahuje cenu v Kč a název řetězce.
+  3. heuristiku nad HTML – nejmenší blok, který obsahuje cenu (Kč nebo €) a název řetězce.
 Modul nezávisí na Home Assistantu.
 """
 
@@ -18,7 +18,7 @@ from urllib.parse import parse_qs, urljoin, urlparse
 
 from bs4 import BeautifulSoup, Tag
 
-from .const import CHAIN_ALIASES, CHAIN_NAMES, CURRENCY_CODE
+from .const import CHAIN_ALIASES, CHAIN_NAMES, COUNTRIES, DEFAULT_COUNTRY
 from .kupi import (
     build_offer,
     clean_text,
@@ -27,13 +27,33 @@ from .kupi import (
     to_float,
 )
 
-PRICE_RE = re.compile(r"(?<![\d,.])(\d{1,4}(?:[,.]\d{1,2})?)\s*(?:Kč|kč|CZK|,-)")
+_NUMBER = r"(?<![\d,.])(\d{1,4}(?:[,.]\d{1,2})?)"
+PRICE_RES = {
+    "CZ": re.compile(_NUMBER + r"\s*(?:Kč|kč|KČ|CZK|,-)"),
+    "SK": re.compile(_NUMBER + r"\s*(?:€|EUR|eur|Eur)"),
+}
+PRICE_RE = PRICE_RES["CZ"]
+# "€ 0,59" -> "0,59 €", aby stačil jeden regulární výraz
+_EURO_PREFIX_RE = re.compile(r"(?:€|EUR)\s*(\d{1,4}(?:[,.]\d{1,2})?)(?![\d,.])")
+
+
+def price_re(country: str) -> re.Pattern:
+    return PRICE_RES.get(country, PRICE_RES[DEFAULT_COUNTRY])
+
+
+def normalize_prices(text: str, country: str) -> str:
+    if country == "SK":
+        return _EURO_PREFIX_RE.sub(r"\1 €", text)
+    return text
+
+
 AMOUNT_RE = re.compile(r"(?:\d{1,2}\s*[x×]\s*)?\d+(?:[,.]\d+)?\s*(?:ml|l)\b", re.IGNORECASE)
 DISCOUNT_RE = re.compile(r"[-–−]\s*(\d{1,2})\s*%")
 DATE_RANGE_RE = re.compile(
-    r"(?:(?:od|platí od)\s*)?\d{1,2}\.\s*\d{1,2}\.(?:\s*\d{4})?\s*[-–]\s*(?:do\s*)?\d{1,2}\.\s*\d{1,2}\.(?:\s*\d{4})?"
+    r"(?:od|plat[ií] od)\s+\d{1,2}\.\s*\d{1,2}\.(?:\s*\d{4})?\s+do\s+\d{1,2}\.\s*\d{1,2}\.(?:\s*\d{4})?"
+    r"|(?:(?:od|platí od)\s*)?\d{1,2}\.\s*\d{1,2}\.(?:\s*\d{4})?\s*[-–]\s*(?:do\s*)?\d{1,2}\.\s*\d{1,2}\.(?:\s*\d{4})?"
     r"|(?:platí\s+)?do\s+\d{1,2}\.\s*\d{1,2}\.(?:\s*\d{4})?"
-    r"|dnes končí|zítra končí",
+    r"|dnes končí|zítra končí|zajtra končí",
     re.IGNORECASE,
 )
 LOYALTY_WORDS = (
@@ -46,6 +66,10 @@ LOYALTY_WORDS = (
     "penny karta",
     "cleny klubu",
     "vernostni",
+    "s aplikaciou",
+    "billa club",
+    "moja billa",
+    "kartou coop",
 )
 CARD_TAGS = ("article", "li", "div", "a", "tr", "section")
 MAX_CARD_TEXT = 500
@@ -168,15 +192,16 @@ def _date(value: Any) -> date | None:
 CURRENCY_KEYS = ("priceCurrency", "currency", "currencyCode", "mena")
 
 
-def _foreign_currency(*objs: Any) -> bool:
-    """True, když nabídka výslovně uvádí jinou měnu než Kč (akce mimo ČR)."""
+def _foreign_currency(*objs: Any, country: str = DEFAULT_COUNTRY) -> bool:
+    """True, když nabídka výslovně uvádí jinou měnu, než platí ve zvolené zemi."""
+    allowed = COUNTRIES[country]["currency_aliases"]
     for obj in objs:
         if not isinstance(obj, dict):
             continue
         value = _first(obj, CURRENCY_KEYS)
         if isinstance(value, dict):
             value = _first(value, ("code", "name", "symbol"))
-        if value and normalize(str(value)) not in (CURRENCY_CODE.lower(), "kc", "czk"):
+        if value and normalize(str(value)) not in allowed:
             return True
     return False
 
@@ -207,6 +232,7 @@ def _image_of(value: Any) -> str:
 def _make(
     *,
     source: str,
+    country: str = DEFAULT_COUNTRY,
     name: str,
     shop: str,
     price: float,
@@ -243,6 +269,7 @@ def _make(
         image=urljoin(page_url, image) if image else "",
         source=source,
         old_price=old_price,
+        currency=COUNTRIES[country]["currency"],
     )
 
 
@@ -268,7 +295,7 @@ def _jsonld_products(data: Any):
 
 
 def parse_jsonld(
-    html_or_soup: Any, page_url: str, today: date, source: str
+    html_or_soup: Any, page_url: str, today: date, source: str, country: str = DEFAULT_COUNTRY
 ) -> list[dict[str, Any]]:
     soup = (
         html_or_soup
@@ -292,7 +319,7 @@ def parse_jsonld(
             for offer in raw if isinstance(raw, list) else []:
                 if not isinstance(offer, dict):
                     continue
-                if _foreign_currency(offer, product.get("offers")):
+                if _foreign_currency(offer, product.get("offers"), country=country):
                     continue
                 shop = _name_of(offer.get("offeredBy") or offer.get("seller")) or fallback_shop
                 price = _price(offer.get("price") or offer.get("lowPrice"))
@@ -303,6 +330,7 @@ def parse_jsonld(
                 offers.append(
                     _make(
                         source=source,
+                        country=country,
                         name=name,
                         shop=shop,
                         price=price,
@@ -332,7 +360,7 @@ def _walk(data: Any, depth: int = 0):
 
 
 def parse_embedded_json(
-    soup: BeautifulSoup, page_url: str, today: date, source: str
+    soup: BeautifulSoup, page_url: str, today: date, source: str, country: str = DEFAULT_COUNTRY
 ) -> list[dict[str, Any]]:
     fallback_shop = _chain_from_url(page_url)
     offers: list[dict[str, Any]] = []
@@ -355,7 +383,9 @@ def parse_embedded_json(
             if not isinstance(name, str) or price is None:
                 continue
             if _foreign_currency(
-                obj, obj.get("price") if isinstance(obj.get("price"), dict) else None
+                obj,
+                obj.get("price") if isinstance(obj.get("price"), dict) else None,
+                country=country,
             ):
                 continue
             shop = _name_of(_first(obj, SHOP_KEYS)) or fallback_shop
@@ -364,6 +394,7 @@ def parse_embedded_json(
             offers.append(
                 _make(
                     source=source,
+                    country=country,
                     name=clean_text(name),
                     shop=shop,
                     price=price,
@@ -400,7 +431,7 @@ def _card_shop(node: Tag, text: str) -> str | None:
     return detect_chain(*hints)
 
 
-def _card_name(node: Tag, text: str) -> str:
+def _card_name(node: Tag, text: str, pattern: re.Pattern = PRICE_RE) -> str:
     for selector in (
         "h1",
         "h2",
@@ -415,33 +446,36 @@ def _card_name(node: Tag, text: str) -> str:
         found = node.select_one(selector)
         if found:
             name = clean_text(found.get("title") or found.get_text(" ", strip=True))
-            if name and not PRICE_RE.fullmatch(name) and len(name) > 2:
+            if name and not pattern.fullmatch(name) and len(name) > 2:
                 return name
     for tag in node.find_all(["a", "img"]):
         name = clean_text(tag.get("title") or tag.get("alt") or "")
         if len(name) > 2 and (detect_chain(name) is None or len(name) > 15):
             return name
-    head = PRICE_RE.split(text)[0]
+    head = pattern.split(text)[0]
     return clean_text(head)[:120]
 
 
-def _card_prices(node: Tag, text: str) -> tuple[float | None, float | None]:
+def _card_prices(
+    node: Tag, text: str, pattern: re.Pattern = PRICE_RE, country: str = DEFAULT_COUNTRY
+) -> tuple[float | None, float | None]:
     old = None
     for tag in node.find_all(["del", "s", "strike"]) + node.select(
         "[class*=old], [class*=original], [class*=before]"
     ):
-        match = PRICE_RE.search(tag.get_text(" ", strip=True))
+        match = pattern.search(normalize_prices(tag.get_text(" ", strip=True), country))
         if match:
             old = to_float(match.group(1))
             break
-    prices = [to_float(m.group(1)) for m in PRICE_RE.finditer(text)]
-    # ceny za jednotku ("… Kč / 1 l") nechceme brát jako cenu produktu
+    prices = [to_float(m.group(1)) for m in pattern.finditer(text)]
+    # ceny za jednotku ("… Kč / 1 l", "1,18 €/l") nechceme brát jako cenu produktu
     unit_spans = [
-        m.span() for m in re.finditer(r"\d[\d,.\s]*\s*Kč\s*/\s*\d*[,.]?\d*\s*(?:l|kg|ks)\b", text)
+        m.span()
+        for m in re.finditer(r"\d[\d,.\s]*\s*(?:Kč|€|EUR)\s*/\s*\d*[,.]?\d*\s*(?:l|kg|ks)\b", text)
     ]
     prices = [
         to_float(m.group(1))
-        for m in PRICE_RE.finditer(text)
+        for m in pattern.finditer(text)
         if not any(a <= m.start() < b for a, b in unit_spans)
     ] or prices
     candidates = [p for p in prices if p and p != old]
@@ -453,15 +487,20 @@ def _card_prices(node: Tag, text: str) -> tuple[float | None, float | None]:
 
 
 def parse_html_cards(
-    soup: BeautifulSoup, page_url: str, today: date, source: str
+    soup: BeautifulSoup, page_url: str, today: date, source: str, country: str = DEFAULT_COUNTRY
 ) -> list[dict[str, Any]]:
     fallback_shop = _chain_from_url(page_url)
+    pattern = price_re(country)
+
+    def card_text(node: Tag) -> str:
+        return normalize_prices(_card_text(node), country)
+
     candidates: list[Tag] = []
     for node in soup.find_all(CARD_TAGS):
         if node.name in ("script", "style"):
             continue
-        text = _card_text(node)
-        if not text or len(text) > MAX_CARD_TEXT or not PRICE_RE.search(text):
+        text = card_text(node)
+        if not text or len(text) > MAX_CARD_TEXT or not pattern.search(text):
             continue
         if not (_card_shop(node, text) or fallback_shop):
             continue
@@ -479,17 +518,17 @@ def parse_html_cards(
     for card in cards:
         # bloky s cenou bývají menší než celá karta – vezmeme rodiče, který má i název
         node = card
-        text = _card_text(node)
+        text = card_text(node)
         while (
             node.parent is not None
-            and len(_card_text(node.parent)) <= MAX_CARD_TEXT
+            and len(card_text(node.parent)) <= MAX_CARD_TEXT
             and not node.find(["h1", "h2", "h3", "h4", "img"])
         ):
             node = node.parent
-            text = _card_text(node)
+            text = card_text(node)
         shop = _card_shop(node, text) or fallback_shop
-        price, old = _card_prices(node, text)
-        name = _card_name(node, text)
+        price, old = _card_prices(node, text, pattern, country)
+        name = _card_name(node, text, pattern)
         if not shop or price is None or not name:
             continue
         validity_match = DATE_RANGE_RE.search(text)
@@ -501,6 +540,7 @@ def parse_html_cards(
         offers.append(
             _make(
                 source=source,
+                country=country,
                 name=name,
                 shop=shop,
                 price=price,
@@ -545,10 +585,12 @@ def dedupe(offers: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return list(result.values())
 
 
-def parse_generic(html: str, page_url: str, today: date, source: str) -> list[dict[str, Any]]:
+def parse_generic(
+    html: str, page_url: str, today: date, source: str, country: str = DEFAULT_COUNTRY
+) -> list[dict[str, Any]]:
     soup = BeautifulSoup(html, "html.parser")
-    offers = parse_jsonld(soup, page_url, today, source)
-    offers += parse_embedded_json(soup, page_url, today, source)
+    offers = parse_jsonld(soup, page_url, today, source, country)
+    offers += parse_embedded_json(soup, page_url, today, source, country)
     if not offers:
-        offers = parse_html_cards(soup, page_url, today, source)
+        offers = parse_html_cards(soup, page_url, today, source, country)
     return dedupe(offers)

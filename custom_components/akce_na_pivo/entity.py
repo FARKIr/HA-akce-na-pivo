@@ -20,6 +20,7 @@ OFFER_ATTRS = (
     "chain",
     "online",
     "price",
+    "currency",
     "old_price",
     "discount_percent",
     "amount",

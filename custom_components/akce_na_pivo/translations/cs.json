@@ -3,9 +3,16 @@
     "step": {
       "user": {
         "title": "Akce na pivo",
-        "description": "Vyberte značky piva (nebo napište vlastní a potvrďte Enterem), zdroje akcí (Kupi.cz, Kompas Slev, AkcniCeny.cz, Cenito, případně vlastní URL), odkud počítat vzdálenost a kdy se mají akce kontrolovat. Pobočky se hledají v OpenStreetMap.",
+        "description": "Pojmenujte integraci a vyberte zemi. Pro Česko se použijí české weby (ceny v Kč), pro Slovensko slovenské (ceny v €). Chcete-li obě země, přidejte integraci dvakrát.",
         "data": {
           "name": "Název",
+          "country": "Země"
+        }
+      },
+      "settings": {
+        "title": "Akce na pivo – {country}",
+        "description": "Vyberte značky piva (nebo napište vlastní a potvrďte Enterem), weby s akcemi, odkud počítat vzdálenost a kdy akce kontrolovat. Pobočky se hledají v OpenStreetMap jen v zemi {country}.",
+        "data": {
           "brands": "Značky piva",
           "sources": "Zdroje akcí",
           "custom_urls": "Vlastní URL stránek s akcemi (jedna na řádek, lze použít {query} a {slug})",
@@ -31,7 +38,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "Akce na pivo – nastavení",
+        "title": "Akce na pivo – nastavení ({country})",
         "data": {
           "brands": "Značky piva",
           "sources": "Zdroje akcí",

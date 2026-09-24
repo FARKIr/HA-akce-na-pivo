@@ -5,7 +5,8 @@
  * Zobrazuje N nejlevnějších akcí na pivo, obchod, adresu, vzdálenost, zdroj a mapu.
  */
 
-const CARD_VERSION = "1.1.0";
+const CARD_VERSION = "1.2.0";
+const FLAGS = { CZ: "🇨🇿", SK: "🇸🇰" };
 const LEAFLET_VERSION = "1.9.4";
 const LEAFLET_JS = `https://cdn.jsdelivr.net/npm/leaflet@${LEAFLET_VERSION}/dist/leaflet.js`;
 const LEAFLET_CSS = `https://cdn.jsdelivr.net/npm/leaflet@${LEAFLET_VERSION}/dist/leaflet.css`;
@@ -38,10 +39,10 @@ function loadLeaflet() {
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
-const money = (value) =>
+const money = (value, symbol = "Kč") =>
   value === null || value === undefined || value === ""
     ? "–"
-    : `${Number(value).toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Kč`;
+    : `${Number(value).toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${symbol}`;
 
 const shortDate = (iso) => {
   if (!iso) return "";
@@ -141,7 +142,7 @@ class AkceNaPivoCard extends HTMLElement {
           <div>
             <div class="title">${esc(this._config.title)}</div>
             <div class="sub">
-              ${attrs.value_type ? `řazeno: ${esc(attrs.value_type)}` : ""}
+              ${attrs.country ? `${FLAGS[attrs.country] || esc(attrs.country)} ` : ""}${attrs.value_type ? `řazeno: ${esc(attrs.value_type)}` : ""}
               ${updated ? ` · aktualizace ${updated.toLocaleString("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}
             </div>
           </div>
@@ -195,12 +196,17 @@ class AkceNaPivoCard extends HTMLElement {
             </div>` : ""}
         </div>
         <div class="prices">
-          <div class="price">${money(o.price)}</div>
-          ${o.old_price ? `<div class="old">${money(o.old_price)}</div>` : ""}
+          <div class="price">${this._money(o.price)}</div>
+          ${o.old_price ? `<div class="old">${this._money(o.old_price)}</div>` : ""}
           ${o.discount_percent ? `<div class="disc">−${Number(o.discount_percent)} %</div>` : ""}
-          ${o.price_per_half_liter ? `<div class="unit">${money(o.price_per_half_liter)} / 0,5 l</div>` : ""}
+          ${o.price_per_half_liter ? `<div class="unit">${this._money(o.price_per_half_liter)} / 0,5 l</div>` : ""}
         </div>
       </div>`;
+  }
+
+  _money(value) {
+    const attrs = this._hass?.states[this._config.entity]?.attributes || {};
+    return money(value, attrs.currency_symbol || "Kč");
   }
 
   _sourceChips(o) {
@@ -263,7 +269,7 @@ class AkceNaPivoCard extends HTMLElement {
       });
       const marker = L.marker([o.latitude, o.longitude], { icon })
         .addTo(map)
-        .bindPopup(`<b>${i + 1}. ${esc(o.product)}</b><br>${esc(o.shop)} – ${money(o.price)}<br>${esc(o.address || "")}`);
+        .bindPopup(`<b>${i + 1}. ${esc(o.product)}</b><br>${esc(o.shop)} – ${this._money(o.price)}<br>${esc(o.address || "")}`);
       marker.on("click", () => this._select(i));
       this._markers[i] = marker;
       bounds.push([o.latitude, o.longitude]);

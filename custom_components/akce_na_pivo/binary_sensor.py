@@ -9,7 +9,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import BeerConfigEntry
-from .const import CONF_PRICE_ALERT, DEFAULT_PRICE_ALERT
 from .coordinator import BeerDealsCoordinator
 from .entity import BeerEntity, offer_attributes
 
@@ -38,7 +37,8 @@ class CheapBeerBinarySensor(BeerEntity, BinarySensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         cheap = self._cheap()
         return {
-            "limit_per_half_liter": self.coordinator.opt(CONF_PRICE_ALERT, DEFAULT_PRICE_ALERT),
+            "limit_per_half_liter": self.coordinator.price_alert,
+            "currency": self.coordinator.currency,
             "count": len(cheap),
             "offers": [offer_attributes(o) for o in cheap[:5]],
         }
