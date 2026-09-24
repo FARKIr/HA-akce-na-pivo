@@ -80,7 +80,7 @@ class AkceNaPivoCard extends HTMLElement {
   setConfig(config) {
     if (!config || !config.entity) throw new Error("Zadajte entitu (senzor Najlacnejšie pivo)");
     this._config = {
-      title: "🍺 Najlacnejšie pivo",
+      title: "Najlacnejšie pivo",
       count: 5,
       show_map: true,
       show_images: true,
@@ -258,9 +258,10 @@ class AkceNaPivoCard extends HTMLElement {
     if (!el.isConnected) return;
     const map = L.map(el, { zoomControl: true, attributionControl: true, scrollWheelZoom: false });
     this._map = map;
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+      subdomains: "abcd",
       maxZoom: 19,
-      attribution: "© OpenStreetMap",
+      attribution: '© <a href="https://carto.com/">CARTO</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);
     const bounds = [];
     this._markers = [];

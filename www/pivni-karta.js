@@ -1,40 +1,55 @@
 /*
- * 🍺 Pivná karta – samostatná Lovelace karta pre integráciu "Akcie na pivo"
- *
- * Ukáže, KAM ÍSŤ po najlacnejšie pivo (obchod, adresa, vzdialenosť, cena),
- * výber značky, rebríček najlacnejších akcií a mapu – všetko na pivnom pozadí
- * s penou a bublinkami.
- *
- * Inštalácia (automaticky cez integráciu alebo bez HACS):
- *   1. integrácia kartu automaticky sprístupní na /akce_na_pivo/pivna-karta.js
- *   alebo ručne:
- *   1. skopírujte súbor do /config/www/pivni-karta.js (alebo pivna-karta.js)
- *   2. Nastavenia → Ovládacie panely → ⋮ → Zdroje → Pridať zdroj
- *        URL: /local/pivni-karta.js      Typ: JavaScript modul
- *   3. do nástenky pridajte kartu "Pivná karta" (type: custom:pivna-karta alebo custom:pivni-karta)
+ * Pivná karta – moderná Lovelace karta pre integráciu "Akcie na pivo"
+ * Zobrazuje najvýhodnejšie ponuky piva, obchod, adresu, vzdialenosť, navigáciu a mapu.
  */
 
-const PIVNA_KARTA_VERSION = "1.0.0";
+const PIVNA_KARTA_VERSION = "2.0.0";
+const LEAFLET_VERSION = "1.9.4";
+const LEAFLET_JS = `https://cdn.jsdelivr.net/npm/leaflet@${LEAFLET_VERSION}/dist/leaflet.js`;
+const LEAFLET_CSS = `https://cdn.jsdelivr.net/npm/leaflet@${LEAFLET_VERSION}/dist/leaflet.css`;
 
 console.info(
-  `%c 🍺 PIVNÁ-KARTA %c v${PIVNA_KARTA_VERSION} `,
-  "color:#3b1f00;background:#f6b21b;font-weight:700;border-radius:3px 0 0 3px",
-  "color:#f6b21b;background:#3b1f00;border-radius:0 3px 3px 0"
+  `%c PIVNÁ KARTA %c v${PIVNA_KARTA_VERSION} `,
+  "color:#fff;background:#d97706;font-weight:700;border-radius:3px 0 0 3px",
+  "color:#d97706;background:#fef3c7;border-radius:0 3px 3px 0"
 );
 
-const FLAGS = { CZ: "🇨🇿", SK: "🇸🇰" };
+let leafletPromise;
+function loadLeaflet() {
+  if (window.L) return Promise.resolve(window.L);
+  if (!leafletPromise) {
+    leafletPromise = new Promise((resolve, reject) => {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = LEAFLET_CSS;
+      document.head.appendChild(link);
+
+      const script = document.createElement("script");
+      script.src = LEAFLET_JS;
+      script.async = true;
+      script.onload = () => (window.L ? resolve(window.L) : reject(new Error("Leaflet")));
+      script.onerror = () => {
+        leafletPromise = undefined;
+        reject(new Error("Leaflet sa nepodarilo načítať"));
+      };
+      document.head.appendChild(script);
+    });
+  }
+  return leafletPromise;
+}
+
 const ALL = "__all__";
 
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
-const fmt = (value, symbol) =>
+const fmt = (value, symbol, locale = "sk-SK") =>
   value === null || value === undefined || value === ""
     ? "–"
-    : `${Number(value).toLocaleString("sk-SK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${symbol}`;
+    : `${Number(value).toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${symbol}`;
 
-const km = (value) =>
-  value === null || value === undefined ? "" : `${Number(value).toLocaleString("sk-SK", { maximumFractionDigits: 1 })} km`;
+const km = (value, locale = "sk-SK") =>
+  value === null || value === undefined ? "" : `${Number(value).toLocaleString(locale, { maximumFractionDigits: 1 })} km`;
 
 const shortDate = (iso) => {
   if (!iso) return "";
@@ -46,7 +61,10 @@ class PivnaKarta extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
-    this._brand = null;
+    this._brand = ALL;
+    this._selectedIdx = 0;
+    this._map = null;
+    this._marker = null;
     this._lastKey = "";
   }
 
@@ -62,18 +80,18 @@ class PivnaKarta extends HTMLElement {
   }
 
   setConfig(config) {
-    if (!config || !config.entity) throw new Error("Zadajte entitu – senzor „Najlacnejšie pivo“ z integrácie Akcie na pivo");
+    if (!config || !config.entity) throw new Error("Zadajte entitu – senzor najlacnejšieho piva z integrácie Akcie na pivo");
     this._config = {
       title: "Kam na pivo",
       count: 5,
       show_map: true,
       show_list: true,
       show_brands: true,
-      bubbles: true,
       map_height: 180,
       ...config,
     };
-    this._brand = this._config.brand || null;
+    this._brand = this._config.brand || ALL;
+    this._selectedIdx = 0;
     this._lastKey = "";
     if (this._hass) this._render();
   }
@@ -89,7 +107,7 @@ class PivnaKarta extends HTMLElement {
   }
 
   getCardSize() {
-    return 5 + (this._config?.show_list ? this._config.count : 0) + (this._config?.show_map ? 3 : 0);
+    return 4 + (this._config?.show_list ? this._config.count : 0) + (this._config?.show_map ? 3 : 0);
   }
 
   getGridOptions() {
@@ -115,234 +133,712 @@ class PivnaKarta extends HTMLElement {
     if (!this._config || !this._hass) return;
     const stateObj = this._hass.states[this._config.entity];
     if (!stateObj) {
-      this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card><div class="beer"><div class="empty">Entita ${esc(this._config.entity)} sa nenašla</div></div></ha-card>`;
+      this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card><div class="card-container"><div class="empty-state"><ha-icon icon="mdi:alert-circle-outline"></ha-icon><div>Entita ${esc(this._config.entity)} sa nenašla</div></div></div></ha-card>`;
       return;
     }
-    const attrs = this._attrs();
-    const symbol = attrs.currency_symbol || (attrs.country === "CZ" ? "Kč" : "€");
-    const { best, list } = this._selection(attrs);
-    const brandNames = Object.keys(attrs.brands || {});
-    const count = Math.max(1, Number(this._config.count) || 5);
-    const updated = attrs.updated ? new Date(attrs.updated) : null;
 
-    const bubbles = this._config.bubbles
-      ? `<div class="bubbles" aria-hidden="true">${Array.from({ length: 18 }, (_, i) => {
-          const size = 4 + ((i * 7) % 9);
-          return `<span style="left:${(i * 53) % 100}%;width:${size}px;height:${size}px;animation-duration:${6 + ((i * 3) % 7)}s;animation-delay:-${(i * 1.7) % 9}s"></span>`;
-        }).join("")}</div>`
-      : "";
+    const attrs = this._attrs();
+    const isCZ = attrs.country === "CZ";
+    const locale = isCZ ? "cs-CZ" : "sk-SK";
+    const symbol = attrs.currency_symbol || (isCZ ? "Kč" : "€");
+    const { best, list } = this._selection(attrs);
+    const count = Math.max(1, Number(this._config.count) || 5);
+    const displayedList = list.slice(0, count);
+
+    // Active selected deal for the hero section
+    const currentDeal = displayedList[this._selectedIdx] || best || null;
+
+    // Filter brands: extract all available brands from offers and attrs
+    const allBrandsMap = attrs.brands || {};
+    const brandNames = Object.keys(allBrandsMap).sort((a, b) => a.localeCompare(b));
+    // Pick top brands that actually have deals in offers list
+    const activeBrandsInOffers = Array.from(new Set((attrs.offers || []).map((o) => o.brand).filter(Boolean)));
+    const topChips = activeBrandsInOffers.slice(0, 8);
+
+    const updated = attrs.updated ? new Date(attrs.updated) : null;
 
     this.shadowRoot.innerHTML = `
       <style>${STYLE}</style>
-      <ha-card><div class="beer">
-        ${bubbles}
-        <div class="foam">
-          <div class="head">
-            <div class="title">🍺 ${esc(this._config.title)} ${attrs.country ? FLAGS[attrs.country] || "" : ""}</div>
-            <button class="refresh" title="Aktualizovať akcie" aria-label="Aktualizovať akcie"><ha-icon icon="mdi:refresh"></ha-icon></button>
+      <ha-card>
+        <div class="card-container">
+          <!-- Header -->
+          <div class="card-header">
+            <div class="header-left">
+              <div class="header-icon">
+                <ha-icon icon="mdi:beer-outline"></ha-icon>
+              </div>
+              <div>
+                <div class="header-title">${esc(this._config.title)}</div>
+                <div class="header-meta">
+                  ${attrs.country ? `<span class="country-tag">${esc(attrs.country)}</span>` : ""}
+                  <span>${updated ? `Aktualizované ${updated.toLocaleString(locale, { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}` : "Čakám na dáta…"}</span>
+                </div>
+              </div>
+            </div>
+            <button class="refresh-btn" title="Aktualizovať akcie" aria-label="Aktualizovať akcie">
+              <ha-icon icon="mdi:refresh"></ha-icon>
+            </button>
           </div>
-          <div class="sub">${updated ? `aktualizované ${updated.toLocaleString("sk-SK", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}` : "čakám na dáta…"}</div>
-        </div>
 
-        <div class="content">
+          <!-- Brand Filters -->
           ${this._config.show_brands && brandNames.length > 1 ? `
-            <div class="brands" role="tablist">
-              <button class="chip ${!this._brand || this._brand === ALL ? "on" : ""}" data-brand="${ALL}">Všetko</button>
-              ${brandNames.map((b) => `<button class="chip ${this._brand === b ? "on" : ""}" data-brand="${esc(b)}">${esc(b)}</button>`).join("")}
+            <div class="filter-bar">
+              <div class="filter-controls">
+                <select class="brand-select" aria-label="Výber značky">
+                  <option value="${ALL}" ${this._brand === ALL ? "selected" : ""}>Všetky značky (${brandNames.length})</option>
+                  ${brandNames.map((b) => `<option value="${esc(b)}" ${this._brand === b ? "selected" : ""}>${esc(b)}</option>`).join("")}
+                </select>
+              </div>
+
+              ${topChips.length > 1 ? `
+                <div class="brand-chips-scroll" role="tablist">
+                  <button class="chip ${this._brand === ALL ? "active" : ""}" data-brand="${ALL}">Všetko</button>
+                  ${topChips.map((b) => `<button class="chip ${this._brand === b ? "active" : ""}" data-brand="${esc(b)}">${esc(b)}</button>`).join("")}
+                </div>` : ""}
             </div>` : ""}
 
-          ${best ? this._hero(best, symbol) : `<div class="empty">Na ${this._brand && this._brand !== ALL ? esc(this._brand) : "vybrané pivo"} teraz žiadna akcia nie je 😢</div>`}
+          <!-- Hero Deal -->
+          ${currentDeal ? this._heroHtml(currentDeal, symbol, locale) : `
+            <div class="empty-state">
+              <ha-icon icon="mdi:tag-off-outline"></ha-icon>
+              <div>Na vybrané pivo momentálne nie je žiadna akcia v okolí.</div>
+            </div>`}
 
-          ${best && this._config.show_map && best.latitude != null ? this._map(best) : ""}
+          <!-- Map -->
+          ${currentDeal && this._config.show_map && currentDeal.latitude != null ? `
+            <div class="map-wrap" id="map-container" style="height:${Number(this._config.map_height) || 180}px"></div>
+          ` : ""}
 
-          ${this._config.show_list && list.length > 1 ? `
-            <div class="section">🏆 Najlacnejšie akcie</div>
-            <div class="list">${list.slice(0, count).map((o, i) => this._row(o, i, symbol, o === best)).join("")}</div>` : ""}
+          <!-- Deals Ranking -->
+          ${this._config.show_list && displayedList.length > 0 ? `
+            <div class="section-title">Najlepšie akcie v okolí</div>
+            <div class="deals-list">
+              ${displayedList.map((o, i) => this._rowHtml(o, i, symbol, locale, i === this._selectedIdx)).join("")}
+            </div>` : ""}
         </div>
-      </div></ha-card>`;
+      </ha-card>`;
 
-    this.shadowRoot.querySelector(".refresh")?.addEventListener("click", () =>
+    // Event listeners
+    this.shadowRoot.querySelector(".refresh-btn")?.addEventListener("click", () =>
       this._hass.callService("akce_na_pivo", "refresh", {})
     );
-    this.shadowRoot.querySelectorAll(".brands .chip").forEach((chip) =>
+
+    const brandSelect = this.shadowRoot.querySelector(".brand-select");
+    brandSelect?.addEventListener("change", (e) => {
+      this._brand = e.target.value;
+      this._selectedIdx = 0;
+      this._render();
+    });
+
+    this.shadowRoot.querySelectorAll(".brand-chips-scroll .chip").forEach((chip) =>
       chip.addEventListener("click", () => {
         this._brand = chip.dataset.brand;
+        this._selectedIdx = 0;
         this._render();
       })
     );
+
+    this.shadowRoot.querySelectorAll(".deals-list .deal-row").forEach((row) =>
+      row.addEventListener("click", () => {
+        const idx = Number(row.dataset.index);
+        this._selectedIdx = idx;
+        this._render();
+      })
+    );
+
+    // Initialize or update map
+    if (currentDeal && this._config.show_map && currentDeal.latitude != null) {
+      this._initMap(currentDeal);
+    }
   }
 
-  _hero(o, symbol) {
+  async _initMap(deal) {
+    const container = this.shadowRoot.getElementById("map-container");
+    if (!container) return;
+
+    try {
+      const L = await loadLeaflet();
+      if (!container.isConnected) return;
+
+      container.innerHTML = "";
+      const map = L.map(container, {
+        zoomControl: false,
+        attributionControl: false,
+        scrollWheelZoom: false,
+        dragging: !L.Browser.mobile,
+      });
+
+      // CARTO Voyager tiles: clean, fast, zero access-blocked errors
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+        subdomains: "abcd",
+        maxZoom: 19,
+      }).addTo(map);
+
+      const lat = deal.latitude;
+      const lon = deal.longitude;
+      map.setView([lat, lon], 14);
+
+      const markerHtml = `<div style="
+        background: #d97706; color: #fff; width: 28px; height: 28px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.35); border: 2px solid #fff;
+      ">${this._selectedIdx + 1}</div>`;
+
+      const customIcon = L.divIcon({
+        className: "",
+        html: markerHtml,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+      });
+
+      L.marker([lat, lon], { icon: customIcon }).addTo(map);
+      this._map = map;
+    } catch {
+      // Fallback clean static map if Leaflet fails
+      const d = 0.006;
+      container.innerHTML = `<iframe title="Mapa" loading="lazy" src="https://www.openstreetmap.org/export/embed.html?bbox=${deal.longitude - d},${deal.latitude - d / 2},${deal.longitude + d},${deal.latitude + d / 2}&layer=mapnik&marker=${deal.latitude},${deal.longitude}"></iframe>`;
+    }
+  }
+
+  _heroHtml(o, symbol, locale) {
     const shop = o.store_name || o.shop;
     const validity = o.valid_from && o.valid_to
       ? `${shortDate(o.valid_from)} – ${shortDate(o.valid_to)}`
       : o.valid_to ? `do ${shortDate(o.valid_to)}` : esc(o.validity || "");
-    const flags = (o.flags || []).slice(0, 4).map((f) => `<span class="tag">${esc(f)}</span>`).join("");
+
+    const flags = (o.flags || []).slice(0, 4).map((f) => `<span class="tag-badge">${esc(f)}</span>`).join("");
+
     return `
-      <div class="hero">
-        ${o.discount_percent ? `<div class="badge">−${Number(o.discount_percent)} %</div>` : ""}
-        <div class="go">Dnes choď do</div>
-        <div class="shop">${esc(shop)}</div>
-        <div class="where">
-          ${o.address ? `<ha-icon icon="mdi:map-marker"></ha-icon>${esc(o.address)}` : o.online ? "online obchod" : ""}
-          ${o.distance_km != null ? `<span class="dist">${km(o.distance_km)}</span>` : ""}
+      <div class="hero-deal">
+        <div class="hero-top">
+          <div>
+            <div class="hero-store-badge">Odporúčaná predajňa</div>
+            <div class="hero-store-name">${esc(shop)}</div>
+          </div>
+          ${o.discount_percent ? `<div class="hero-discount-badge">−${Number(o.discount_percent)} %</div>` : ""}
         </div>
-        ${o.opening_hours ? `<div class="hours"><ha-icon icon="mdi:clock-outline"></ha-icon>${esc(o.opening_hours)}</div>` : ""}
-        <div class="deal">
-          <div class="product">
-            ${o.image ? `<img src="${esc(o.image)}" alt="" loading="lazy">` : `<div class="mug">🍺</div>`}
-            <div>
-              <div class="pname">${esc(o.product)}</div>
-              <div class="pmeta">${o.amount ? esc(o.amount) : ""}${validity ? ` · ${validity}` : ""}${o.loyalty ? " · iba s kartou" : ""}</div>
+
+        <div class="hero-location">
+          ${o.address ? `<ha-icon icon="mdi:map-marker"></ha-icon><span>${esc(o.address)}</span>` : ""}
+          ${o.distance_km != null ? `<span class="dist-badge">${km(o.distance_km, locale)}</span>` : ""}
+          ${o.opening_hours ? `<span>·</span><ha-icon icon="mdi:clock-outline"></ha-icon><span>${esc(o.opening_hours)}</span>` : ""}
+        </div>
+
+        <div class="hero-body">
+          ${o.image ? `<img class="hero-img" src="${esc(o.image)}" alt="" loading="lazy">` : `
+            <div class="hero-img-placeholder">
+              <ha-icon icon="mdi:glass-mug-variant"></ha-icon>
+            </div>`}
+          <div class="hero-info">
+            <div class="hero-product-name">${esc(o.product)}</div>
+            <div class="hero-product-meta">
+              ${o.amount ? `${esc(o.amount)}` : ""}
+              ${validity ? ` · Platí: ${validity}` : ""}
+              ${o.loyalty ? " · Iba s kartou" : ""}
             </div>
           </div>
-          <div class="price">
-            <div class="big">${fmt(o.price, symbol)}</div>
-            ${o.old_price ? `<div class="old">${fmt(o.old_price, symbol)}</div>` : ""}
-            ${o.price_per_half_liter ? `<div class="unit">${fmt(o.price_per_half_liter, symbol)} / 0,5 l</div>` : ""}
+          <div class="hero-prices">
+            <div class="hero-price-big">${fmt(o.price, symbol, locale)}</div>
+            ${o.old_price ? `<div class="hero-price-old">${fmt(o.old_price, symbol, locale)}</div>` : ""}
+            ${o.price_per_half_liter ? `<div class="hero-price-unit">${fmt(o.price_per_half_liter, symbol, locale)} / 0,5 l</div>` : ""}
           </div>
         </div>
-        ${flags ? `<div class="tags">${flags}</div>` : ""}
-        <div class="actions">
-          ${o.navigate_url ? `<a class="btn primary" href="${esc(o.navigate_url)}" target="_blank" rel="noopener"><ha-icon icon="mdi:navigation-variant"></ha-iconNavigovať</a>` : ""}
-          ${o.map_url ? `<a class="btn" href="${esc(o.map_url)}" target="_blank" rel="noopener"><ha-icon icon="mdi:map"></ha-icon>Mapa</a>` : ""}
-          ${o.url ? `<a class="btn" href="${esc(o.url)}" target="_blank" rel="noopener"><ha-icon icon="mdi:newspaper-variant-outline"></ha-icon>Leták</a>` : ""}
+
+        ${flags ? `<div class="hero-tags">${flags}</div>` : ""}
+
+        <div class="hero-actions">
+          ${o.navigate_url ? `<a class="action-btn primary" href="${esc(o.navigate_url)}" target="_blank" rel="noopener"><ha-icon icon="mdi:navigation-variant"></ha-icon>Navigovať</a>` : ""}
+          ${o.map_url ? `<a class="action-btn" href="${esc(o.map_url)}" target="_blank" rel="noopener"><ha-icon icon="mdi:map"></ha-icon>Mapa</a>` : ""}
+          ${o.url ? `<a class="action-btn" href="${esc(o.url)}" target="_blank" rel="noopener"><ha-icon icon="mdi:newspaper-variant-outline"></ha-icon>Leták</a>` : ""}
         </div>
       </div>`;
   }
 
-  _map(o) {
-    const d = 0.006;
-    const src = `https://www.openstreetmap.org/export/embed.html?bbox=${o.longitude - d},${o.latitude - d / 2},${o.longitude + d},${o.latitude + d / 2}&layer=mapnik&marker=${o.latitude},${o.longitude}`;
-    return `<div class="map" style="height:${Number(this._config.map_height) || 180}px"><iframe title="Mapa obchodu" loading="lazy" src="${src}"></iframe></div>`;
-  }
-
-  _row(o, i, symbol, isBest) {
+  _rowHtml(o, i, symbol, locale, isActive) {
     return `
-      <div class="row ${isBest ? "best" : ""}">
-        <div class="rank">${i + 1}</div>
-        <div class="info">
-          <div class="rname">${esc(o.product)}</div>
-          <div class="rshop">${esc(o.store_name || o.shop)}${o.distance_km != null ? ` · ${km(o.distance_km)}` : ""}</div>
+      <div class="deal-row ${isActive ? "active" : ""}" data-index="${i}">
+        <div class="deal-rank">${i + 1}</div>
+        ${o.image ? `<img class="deal-thumb" src="${esc(o.image)}" alt="" loading="lazy">` : `
+          <div class="deal-thumb-placeholder"><ha-icon icon="mdi:glass-mug-variant"></ha-icon></div>`}
+        <div class="deal-info">
+          <div class="deal-name">${esc(o.product)}</div>
+          <div class="deal-store">
+            <span>${esc(o.store_name || o.shop)}</span>
+            ${o.distance_km != null ? `<span>·</span><span>${km(o.distance_km, locale)}</span>` : ""}
+          </div>
         </div>
-        <div class="rprice">
-          <div>${fmt(o.price, symbol)}</div>
-          ${o.price_per_half_liter ? `<small>${fmt(o.price_per_half_liter, symbol)} / 0,5 l</small>` : ""}
+        <div class="deal-prices">
+          <div class="deal-price">${fmt(o.price, symbol, locale)}</div>
+          ${o.price_per_half_liter ? `<div class="deal-unit">${fmt(o.price_per_half_liter, symbol, locale)}/0,5 l</div>` : ""}
         </div>
       </div>`;
   }
 }
 
 const STYLE = `
-  :host { display:block; }
+  :host { display: block; }
   ha-card {
-    display:block; overflow:hidden; background:none; border:0;
+    display: block;
+    overflow: hidden;
+    background: var(--ha-card-background, var(--card-background-color, #ffffff));
     border-radius: var(--ha-card-border-radius, 16px);
+    box-shadow: var(--ha-card-box-shadow, 0 2px 8px rgba(0,0,0,0.06));
+    border: var(--ha-card-border-width, 1px) solid var(--ha-card-border-color, var(--divider-color, rgba(0,0,0,0.08)));
+    color: var(--primary-text-color, #1f2937);
   }
-  .beer {
-    position: relative; overflow: hidden; color: #2b1600;
-    border-radius: var(--ha-card-border-radius, 16px);
-    background:
-      radial-gradient(120% 60% at 20% 110%, rgba(255,255,255,.18), transparent 60%),
-      linear-gradient(175deg, #ffd35c 0%, #f6b21b 38%, #e08a0b 75%, #b8640a 100%);
-    box-shadow: 0 6px 18px rgba(120,60,0,.35), inset 0 0 0 1px rgba(255,255,255,.15);
+  .card-container {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
   }
-  /* bublinky */
-  .bubbles { position:absolute; inset:0; pointer-events:none; z-index:0; }
-  .bubbles span {
-    position:absolute; bottom:-12px; border-radius:50%;
-    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.95), rgba(255,255,255,.35) 60%, rgba(255,255,255,.1));
-    animation-name: rise; animation-timing-function: ease-in; animation-iteration-count: infinite;
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
   }
-  @keyframes rise {
-    0% { transform: translate(0, 0); opacity: 0; }
-    10% { opacity: .9; }
-    50% { transform: translate(6px, -50vh); }
-    100% { transform: translate(-4px, -110vh); opacity: 0; }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
   }
-  @media (prefers-reduced-motion: reduce) { .bubbles { display:none; } }
+  .header-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: rgba(217, 119, 6, 0.12);
+    color: #d97706;
+  }
+  .header-icon ha-icon {
+    --mdc-icon-size: 22px;
+  }
+  .header-title {
+    font-size: 1.22em;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--primary-text-color);
+  }
+  .header-meta {
+    font-size: 0.78em;
+    color: var(--secondary-text-color, #6b7280);
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .country-tag {
+    font-size: 0.72em;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: var(--secondary-background-color, #f3f4f6);
+    color: var(--primary-text-color);
+  }
+  .refresh-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--secondary-text-color);
+    padding: 8px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+  }
+  .refresh-btn:hover {
+    background: var(--secondary-background-color, rgba(0,0,0,0.06));
+    color: var(--primary-text-color);
+  }
 
-  /* pena */
-  .foam {
-    position: relative; z-index: 1; padding: 14px 16px 22px;
-    background: #fffaf0;
-    box-shadow: 0 2px 0 rgba(255,255,255,.6) inset;
+  .filter-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
-  .foam::after {
-    content:""; position:absolute; left:0; right:0; bottom:-14px; height:28px;
-    background:
-      radial-gradient(circle at 10px 6px, #fffaf0 12px, transparent 13px) 0 0/34px 28px repeat-x,
-      radial-gradient(circle at 27px 2px, #fffaf0 10px, transparent 11px) 0 0/34px 28px repeat-x;
+  .filter-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
-  .head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-  .title { font-size: 1.35em; font-weight: 800; letter-spacing:.2px; color:#6b3a00; }
-  .sub { font-size: .8em; color: #9a6a2a; margin-top: 2px; }
-  .refresh { background:none; border:0; cursor:pointer; color:#6b3a00; border-radius:50%; padding:6px; }
-  .refresh:hover { background: rgba(107,58,0,.08); }
-
-  .content { position:relative; z-index:1; padding: 18px 14px 14px; }
-
-  .brands { display:flex; flex-wrap:wrap; gap:6px; margin-bottom: 12px; }
+  .brand-select {
+    flex: 1;
+    font: inherit;
+    font-size: 0.85em;
+    font-weight: 600;
+    padding: 7px 12px;
+    border-radius: 10px;
+    background: var(--secondary-background-color, #f3f4f6);
+    color: var(--primary-text-color);
+    border: 1px solid var(--divider-color, rgba(0,0,0,0.08));
+    outline: none;
+    cursor: pointer;
+  }
+  .brand-chips-scroll {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 2px 0 6px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+  .brand-chips-scroll::-webkit-scrollbar {
+    display: none;
+  }
   .chip {
-    border:0; cursor:pointer; font: inherit; font-size:.82em; font-weight:600;
-    padding: 5px 11px; border-radius: 999px; color:#5a3000;
-    background: rgba(255,250,240,.55); box-shadow: inset 0 0 0 1px rgba(90,48,0,.15);
+    flex: 0 0 auto;
+    border: 1px solid var(--divider-color, rgba(0,0,0,0.1));
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.8em;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 999px;
+    color: var(--secondary-text-color, #4b5563);
+    background: var(--secondary-background-color, #f9fafb);
+    transition: all 0.15s ease;
   }
-  .chip.on { background:#3b1f00; color:#ffd35c; box-shadow:none; }
+  .chip:hover {
+    background: rgba(217, 119, 6, 0.08);
+    color: var(--primary-text-color);
+  }
+  .chip.active {
+    background: #d97706;
+    color: #ffffff;
+    border-color: #d97706;
+    box-shadow: 0 2px 6px rgba(217, 119, 6, 0.25);
+  }
 
-  .hero {
-    background: rgba(255,250,240,.9); border-radius: 16px; padding: 14px 14px 12px;
-    box-shadow: 0 4px 14px rgba(90,40,0,.25); position: relative;
+  .hero-deal {
+    background: var(--secondary-background-color, #f9fafb);
+    border: 1px solid var(--divider-color, rgba(0,0,0,0.08));
+    border-radius: 14px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
   }
-  .go { text-transform: uppercase; font-size:.72em; font-weight:800; letter-spacing: 1.5px; color:#b8640a; }
-  .shop { padding-right: 64px; font-size: 1.9em; font-weight: 900; line-height:1.1; color:#2b1600; margin: 2px 0 4px; word-break: break-word; }
-  .where, .hours { display:flex; align-items:center; flex-wrap:wrap; gap:4px; font-size:.9em; color:#5a3a14; }
-  .hours { font-size:.8em; margin-top:2px; }
-  .where ha-icon, .hours ha-icon { --mdc-icon-size:16px; color:#b8640a; }
-  .dist { margin-left:6px; background:#3b1f00; color:#ffd35c; border-radius:999px; padding:1px 8px; font-weight:700; font-size:.85em; }
+  .hero-deal::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #f59e0b, #d97706);
+  }
+  .hero-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+  .hero-store-badge {
+    font-size: 0.72em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #d97706;
+  }
+  .hero-store-name {
+    font-size: 1.5em;
+    font-weight: 800;
+    line-height: 1.15;
+    color: var(--primary-text-color);
+    margin-top: 2px;
+  }
+  .hero-discount-badge {
+    background: #dc2626;
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 0.85em;
+    padding: 3px 8px;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(220, 38, 38, 0.25);
+    white-space: nowrap;
+  }
+  .hero-location {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 0.85em;
+    color: var(--secondary-text-color);
+    margin-bottom: 12px;
+  }
+  .hero-location ha-icon {
+    --mdc-icon-size: 16px;
+    color: #d97706;
+  }
+  .dist-badge {
+    background: var(--card-background-color, #ffffff);
+    border: 1px solid var(--divider-color, rgba(0,0,0,0.1));
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 0.85em;
+    color: var(--primary-text-color);
+  }
 
-  .deal { display:flex; align-items:center; gap:10px; margin-top: 12px; padding-top: 10px; border-top: 1px dashed rgba(90,48,0,.25); position:relative; }
-  .product { display:flex; align-items:center; gap:10px; flex:1; min-width:0; }
-  .product img { width:54px; height:54px; object-fit:contain; background:#fff; border-radius:10px; flex:0 0 54px; }
-  .mug { font-size: 2.2em; flex:0 0 auto; }
-  .pname { font-weight:700; line-height:1.2; }
-  .pmeta { font-size:.78em; color:#7a5424; margin-top:2px; }
-  .price { text-align:right; flex:0 0 auto; }
-  .big { font-size:1.6em; font-weight:900; color:#b34700; white-space:nowrap; }
-  .old { font-size:.8em; color:#8a6a4a; text-decoration: line-through; }
-  .unit { font-size:.78em; color:#5a3a14; white-space:nowrap; }
-  .badge {
-    position:absolute; top:12px; right:12px; transform: rotate(8deg);
-    background:#c62828; color:#fff; font-weight:900; font-size:.85em; padding:3px 8px; border-radius:8px;
-    box-shadow: 0 2px 6px rgba(0,0,0,.25);
+  .hero-body {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    border-top: 1px dashed var(--divider-color, rgba(0,0,0,0.12));
+    border-bottom: 1px dashed var(--divider-color, rgba(0,0,0,0.12));
   }
-  .tags { display:flex; flex-wrap:wrap; gap:4px; margin-top:10px; }
-  .tag { font-size:.7em; font-weight:600; padding:2px 8px; border-radius:999px; background:#fde7b0; color:#5a3000; }
-  .actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
-  .btn {
-    display:inline-flex; align-items:center; gap:4px; text-decoration:none; font-weight:700; font-size:.85em;
-    padding: 7px 12px; border-radius: 10px; color:#3b1f00; background: rgba(59,31,0,.08);
+  .hero-img {
+    width: 58px;
+    height: 58px;
+    object-fit: contain;
+    background: #ffffff;
+    border-radius: 10px;
+    border: 1px solid var(--divider-color, rgba(0,0,0,0.08));
+    flex-shrink: 0;
   }
-  .btn ha-icon { --mdc-icon-size:18px; }
-  .btn.primary { background:#3b1f00; color:#ffd35c; }
+  .hero-img-placeholder {
+    width: 58px;
+    height: 58px;
+    border-radius: 10px;
+    background: rgba(217, 119, 6, 0.1);
+    color: #d97706;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .hero-img-placeholder ha-icon {
+    --mdc-icon-size: 30px;
+  }
+  .hero-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .hero-product-name {
+    font-weight: 700;
+    font-size: 1.05em;
+    line-height: 1.25;
+    color: var(--primary-text-color);
+  }
+  .hero-product-meta {
+    font-size: 0.8em;
+    color: var(--secondary-text-color);
+    margin-top: 3px;
+  }
+  .hero-prices {
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .hero-price-big {
+    font-size: 1.55em;
+    font-weight: 900;
+    color: #d97706;
+    white-space: nowrap;
+    line-height: 1.1;
+  }
+  .hero-price-old {
+    font-size: 0.8em;
+    color: var(--secondary-text-color);
+    text-decoration: line-through;
+  }
+  .hero-price-unit {
+    font-size: 0.8em;
+    color: var(--secondary-text-color);
+    white-space: nowrap;
+    margin-top: 2px;
+  }
 
-  .map { margin-top: 12px; border-radius: 14px; overflow:hidden; box-shadow: 0 4px 14px rgba(90,40,0,.25); background:#fffaf0; }
-  .map iframe { width:100%; height:100%; border:0; display:block; }
-
-  .section { margin: 14px 2px 6px; font-weight:800; color:#2b1600; text-shadow: 0 1px 0 rgba(255,255,255,.35); }
-  .list { display:flex; flex-direction:column; gap:6px; }
-  .row { display:flex; align-items:center; gap:10px; padding: 8px 10px; border-radius: 12px; background: rgba(255,250,240,.72); }
-  .row.best { background: rgba(255,250,240,.95); box-shadow: inset 0 0 0 2px #3b1f00; }
-  .rank {
-    flex:0 0 28px; height:28px; border-radius:8px 8px 10px 10px; display:flex; align-items:center; justify-content:center;
-    font-weight:900; color:#3b1f00; background: linear-gradient(#fffaf0 0 30%, #f6b21b 30%); box-shadow: inset 0 0 0 2px #3b1f00;
+  .hero-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 10px;
   }
-  .info { flex:1; min-width:0; }
-  .rname { font-weight:700; font-size:.9em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .rshop { font-size:.78em; color:#6a4a20; }
-  .rprice { text-align:right; font-weight:800; color:#b34700; white-space:nowrap; }
-  .rprice small { display:block; font-weight:600; color:#6a4a20; font-size:.72em; }
-  .empty { padding: 18px 14px; font-weight:600; position:relative; z-index:1; }
+  .tag-badge {
+    font-size: 0.72em;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(217, 119, 6, 0.12);
+    color: #b45309;
+  }
+
+  .hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.82em;
+    padding: 7px 14px;
+    border-radius: 10px;
+    background: var(--card-background-color, #ffffff);
+    color: var(--primary-text-color);
+    border: 1px solid var(--divider-color, rgba(0,0,0,0.12));
+    transition: background 0.15s;
+  }
+  .action-btn:hover {
+    background: var(--secondary-background-color, #f3f4f6);
+  }
+  .action-btn.primary {
+    background: #d97706;
+    color: #ffffff;
+    border-color: #d97706;
+  }
+  .action-btn.primary:hover {
+    background: #b45309;
+  }
+  .action-btn ha-icon {
+    --mdc-icon-size: 16px;
+  }
+
+  .map-wrap {
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid var(--divider-color, rgba(0,0,0,0.1));
+    background: var(--secondary-background-color, #f3f4f6);
+  }
+  .map-wrap iframe, .map-wrap .leaflet-container {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+  }
+
+  .section-title {
+    font-weight: 700;
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--secondary-text-color);
+    margin: 4px 0 0;
+  }
+  .deals-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .deal-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: var(--secondary-background-color, #f9fafb);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .deal-row:hover {
+    border-color: rgba(217, 119, 6, 0.3);
+    background: var(--card-background-color, #ffffff);
+  }
+  .deal-row.active {
+    border-color: #d97706;
+    background: var(--card-background-color, #ffffff);
+    box-shadow: 0 2px 8px rgba(217, 119, 6, 0.12);
+  }
+  .deal-rank {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 0.8em;
+    background: var(--card-background-color, #ffffff);
+    border: 1px solid var(--divider-color, rgba(0,0,0,0.12));
+    color: var(--secondary-text-color);
+    flex-shrink: 0;
+  }
+  .deal-row.active .deal-rank {
+    background: #d97706;
+    color: #ffffff;
+    border-color: #d97706;
+  }
+  .deal-thumb {
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
+    background: #fff;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+  .deal-thumb-placeholder {
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    background: rgba(217, 119, 6, 0.1);
+    color: #d97706;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .deal-thumb-placeholder ha-icon {
+    --mdc-icon-size: 18px;
+  }
+  .deal-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .deal-name {
+    font-weight: 700;
+    font-size: 0.88em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--primary-text-color);
+  }
+  .deal-store {
+    font-size: 0.78em;
+    color: var(--secondary-text-color);
+    margin-top: 1px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .deal-prices {
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .deal-price {
+    font-weight: 800;
+    font-size: 0.95em;
+    color: #d97706;
+    white-space: nowrap;
+  }
+  .deal-unit {
+    font-size: 0.72em;
+    color: var(--secondary-text-color);
+  }
+  .empty-state {
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--secondary-text-color);
+    font-weight: 500;
+  }
+  .empty-state ha-icon {
+    --mdc-icon-size: 32px;
+    color: var(--secondary-text-color);
+    margin-bottom: 6px;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+  }
 `;
 
 class PivnaKartaEditor extends HTMLElement {
@@ -392,27 +888,25 @@ class PivnaKartaEditor extends HTMLElement {
           { name: "show_map", selector: { boolean: {} } },
           { name: "show_list", selector: { boolean: {} } },
           { name: "show_brands", selector: { boolean: {} } },
-          { name: "bubbles", selector: { boolean: {} } },
         ],
       },
     ];
-    this._form.data = { title: "Kam na pivo", count: 5, map_height: 180, show_map: true, show_list: true, show_brands: true, bubbles: true, ...this._config };
+    this._form.data = { title: "Kam na pivo", count: 5, map_height: 180, show_map: true, show_list: true, show_brands: true, ...this._config };
   }
 }
 
 const EDITOR_LABELS = {
-  entity: "Senzor „Najlacnejšie pivo“",
+  entity: "Senzor najlacnejšieho piva",
   title: "Nadpis",
   brand: "Predvolená značka",
   count: "Počet akcií v rebríčku",
   map_height: "Výška mapy (px)",
-  show_map: "Mapa obchodu",
+  show_map: "Mapa predajne",
   show_list: "Rebríček najlacnejších",
-  show_brands: "Prepínač značiek",
-  bubbles: "Bublinky 🫧",
+  show_brands: "Filtrovanie značiek",
 };
 
-// Registrácia custom elementov pod slovenským aj českým názvom pre maximálnu kompatibilitu
+// Registrácia custom elementov pod pivna-karta aj pivni-karta
 if (!customElements.get("pivna-karta")) customElements.define("pivna-karta", PivnaKarta);
 if (!customElements.get("pivni-karta")) customElements.define("pivni-karta", class extends PivnaKarta {});
 if (!customElements.get("pivna-karta-editor")) customElements.define("pivna-karta-editor", PivnaKartaEditor);
@@ -423,16 +917,15 @@ if (!window.customCards.some((c) => c.type === "pivna-karta")) {
   window.customCards.push({
     type: "pivna-karta",
     name: "Pivná karta",
-    description: "Kam ísť po najlacnejšie pivo – obchod, adresa, cena a mapa na pivnom pozadí.",
+    description: "Prehľad najlacnejšieho piva s mapou predajne a filtrami značiek.",
     preview: true,
-    documentationURL: "https://github.com/joshuaaaaa/HA-akce-na-pivo#pivn%C3%A1-karta",
   });
 }
 if (!window.customCards.some((c) => c.type === "pivni-karta")) {
   window.customCards.push({
     type: "pivni-karta",
-    name: "Pivní karta (SK)",
-    description: "Kam ísť po najlacnejšie pivo – obchod, adresa, cena a mapa na pivnom pozadí.",
+    name: "Pivná karta (kompatibilita)",
+    description: "Prehľad najlacnejšieho piva s mapou predajne a filtrami značiek.",
     preview: true,
   });
 }
