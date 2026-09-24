@@ -1,4 +1,4 @@
-"""Akce na pivo – nejlevnější pivo v akci ve vašem okolí (data z kupi.cz)."""
+"""Akcie na pivo – najlacnejšie pivo v akcii vo vašom okolí."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Zaregistruje Lovelace kartu dodávanou s integrací."""
+    """Zaregistruje Lovelace kartu dodávanú s integráciou."""
     await async_register_card(hass)
     return True
 
@@ -60,7 +60,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: BeerConfigEntry) -> bool
 
     options = {**entry.data, **entry.options}
 
-    # denní aktualizace v zadaný čas
+    # denná aktualizácia v zadaný čas
     hour, minute, second = _parse_time(options.get(CONF_UPDATE_TIME, DEFAULT_UPDATE_TIME))
 
     async def _scheduled_refresh(_now) -> None:
@@ -70,14 +70,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: BeerConfigEntry) -> bool
         async_track_time_change(hass, _scheduled_refresh, hour=hour, minute=minute, second=second)
     )
 
-    # volitelně navíc každých N hodin
+    # voliteľne navyše každých N hodín
     interval = int(options.get(CONF_UPDATE_INTERVAL_HOURS) or DEFAULT_UPDATE_INTERVAL_HOURS)
     if interval > 0:
         entry.async_on_unload(
             async_track_time_interval(hass, _scheduled_refresh, timedelta(hours=interval))
         )
 
-    # při pohybu sledované osoby / telefonu přepočítat nejbližší obchody
+    # pri pohybe sledovanej osoby / telefónu prepočítať najbližšie obchody
     if entity_id := options.get(CONF_LOCATION_ENTITY):
 
         @callback

@@ -1,6 +1,6 @@
-"""Parser akčních nabídek z kupi.cz.
+"""Parser akciových ponúk z kupi.cz.
 
-Modul nezávisí na Home Assistantu, aby šel snadno testovat.
+Modul nezávisí na Home Assistante, aby sa dal ľahko testovať.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from bs4 import BeautifulSoup
 from .const import CHAIN_ALIASES, KNOWN_BRANDS, KUPI_BASE_URL, NONALCOHOLIC_WORDS, ONLINE_SHOPS
 
 CZECH_MONTHS = {
+    # CZ
     "ledna": 1,
     "leden": 1,
     "unora": 2,
@@ -39,20 +40,46 @@ CZECH_MONTHS = {
     "listopad": 11,
     "prosince": 12,
     "prosinec": 12,
+    # SK
+    "januara": 1,
+    "januar": 1,
+    "februara": 2,
+    "februar": 2,
+    "marca": 3,
+    "marec": 3,
+    "aprila": 4,
+    "april": 4,
+    "maja": 5,
+    "maj": 5,
+    "juna": 6,
+    "jun": 6,
+    "jula": 7,
+    "jul": 7,
+    "augusta": 8,
+    "august": 8,
+    "septembra": 9,
+    "september": 9,
+    "oktobra": 10,
+    "oktober": 10,
+    "novembra": 11,
+    "november": 11,
+    "decembra": 12,
+    "december": 12,
 }
+MONTHS = CZECH_MONTHS
 
 _NUM = r"\d+(?:[,.]\d+)?"
 
 
 def clean_text(text: str | None) -> str:
-    """Sjednotí mezery (včetně nezlomitelných)."""
+    """Zjednotí medzery (vrátane nezlomiteľných)."""
     if not text:
         return ""
     return " ".join(str(text).replace("\xa0", " ").split())
 
 
 def normalize(text: str | None) -> str:
-    """Malá písmena bez diakritiky."""
+    """Malé písmená bez diakritiky."""
     text = unicodedata.normalize("NFKD", clean_text(text).lower())
     return "".join(ch for ch in text if not unicodedata.combining(ch))
 
@@ -74,7 +101,7 @@ def parse_percentage(text: str | None) -> float | None:
 
 
 def parse_volume(*texts: str | None) -> tuple[int, float | None]:
-    """Vrátí (počet kusů, objem jednoho kusu v litrech)."""
+    """Vráti (počet kusov, objem jedného kusu v litroch)."""
     for raw in texts:
         text = normalize(raw).replace("×", "x")
         if not text:
@@ -92,7 +119,7 @@ def parse_volume(*texts: str | None) -> tuple[int, float | None]:
             if single.group(2) == "ml":
                 volume /= 1000
             pieces = 1
-            pack = re.search(r"(\d+)\s*(?:ks|kusu|pack|-pack|plechovek|lahvi)\b", text)
+            pack = re.search(r"(\d+)\s*(?:ks|kusu|kusov|pack|-pack|plechovek|plechoviek|lahvi|flias|fliaš)\b", text)
             if pack:
                 pieces = int(pack.group(1))
             return pieces, volume
@@ -100,7 +127,7 @@ def parse_volume(*texts: str | None) -> tuple[int, float | None]:
 
 
 def parse_unit_price(text: str | None) -> float | None:
-    """'39,80 Kč / 1 l' -> cena za litr."""
+    """'39,80 Kč / 1 l' -> cena za liter."""
     text = normalize(text)
     match = re.search(rf"({_NUM})\s*kc\s*/\s*({_NUM})?\s*(ml|l)\b", text)
     if not match:
@@ -134,7 +161,7 @@ def _partial_date(text: str, today: date) -> date | None:
 
 
 def parse_validity(text: str | None, today: date) -> tuple[date | None, date | None]:
-    """Převede text platnosti z kupi.cz na (od, do)."""
+    """Prevedie text platnosti z kupi.cz na (od, do)."""
     norm = normalize(text)
     if not norm:
         return None, None
@@ -184,7 +211,7 @@ def brand_aliases(brand: str) -> tuple[str, ...]:
 
 
 def match_brand(product: str, brands: list[str]) -> str | None:
-    """Vrátí první značku, která odpovídá názvu produktu."""
+    """Vráti prvú značku, ktorá zodpovedá názvu produktu."""
     norm = normalize(product)
     for brand in brands:
         for alias in brand_aliases(brand):
@@ -227,7 +254,7 @@ def _product_lookup(soup: BeautifulSoup) -> dict[str, dict[str, str]]:
 
 
 def parse_offers(html: str, source_url: str, today: date) -> list[dict[str, Any]]:
-    """Najde všechny akční nabídky (řádky slev) na stránce kupi.cz."""
+    """Nájde všetky akciové ponuky (riadky zliav) na stránke kupi.cz."""
     soup = BeautifulSoup(html, "html.parser")
     products = _product_lookup(soup)
     page_title = _text(soup, "h1")

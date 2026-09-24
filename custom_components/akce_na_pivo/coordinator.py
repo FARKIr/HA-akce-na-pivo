@@ -1,4 +1,4 @@
-"""Koordinátor – stahuje akce, dohledává obchody a vyhodnocuje nejlevnější pivo."""
+"""Koordinátor – sťahuje akcie, vyhľadáva obchody a vyhodnocuje najlacnejšie pivo."""
 
 from __future__ import annotations
 
@@ -78,13 +78,13 @@ DEAD_URL_DAYS = 7
 
 HTTP_HEADERS = {
     "User-Agent": USER_AGENT,
-    "Accept-Language": "cs-CZ,cs;q=0.9,en;q=0.8",
+    "Accept-Language": "sk-SK,sk;q=0.9,cs;q=0.8,en;q=0.7",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
 
 
 def sort_key(sort_by: str):
-    """Řadicí funkce podle zvoleného kritéria."""
+    """Zoraďovacia funkcia podľa zvoleného kritéria."""
 
     def unit(offer: dict[str, Any]) -> float:
         value = offer.get("price_per_half_liter")
@@ -485,7 +485,7 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             offer["history_min"] = min(past.values()) if past else None
             offer["history_days"] = len(past)
             if past and metric <= min(past.values()):
-                flags.append(f"Nejlevněji za posledních {HISTORY_DAYS} dní")
+                flags.append(f"Najlacnejšie za posledných {HISTORY_DAYS} dní")
             avg = brand_avg.get(offer["brand"])
             offer["cheaper_than_avg"] = (
                 round(avg - offer["price_per_half_liter"], 2)
@@ -494,23 +494,23 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
             if offer["cheaper_than_avg"] and offer["cheaper_than_avg"] >= 1:
                 flags.append(
-                    f"O {offer['cheaper_than_avg']:.2f} {symbol}/0,5 l levnější než průměr akcí"
+                    f"O {offer['cheaper_than_avg']:.2f} {symbol}/0,5 l lacnejšie než priemer akcií"
                 )
             if offer.get("discount_percent") and offer["discount_percent"] >= 30:
-                flags.append(f"Sleva {offer['discount_percent']:g} %")
+                flags.append(f"Zľava {offer['discount_percent']:g} %")
             if offer.get("price_per_half_liter") and offer["price_per_half_liter"] <= alert:
-                flags.append(f"Pod limitem {alert:g} {symbol}/0,5 l")
+                flags.append(f"Pod limitom {alert:g} {symbol}/0,5 l")
                 offer["below_alert"] = True
             else:
                 offer["below_alert"] = False
             if offer["valid_to"] == today.isoformat():
                 flags.append("Končí dnes")
             elif offer["valid_to"] == (today + timedelta(days=1)).isoformat():
-                flags.append("Končí zítra")
+                flags.append("Končí zajtra")
             if offer["upcoming"]:
                 flags.append(f"Platí od {offer['valid_from']}")
             if offer["loyalty"]:
-                flags.append("Jen s věrnostní kartou/aplikací")
+                flags.append("Len s vernostnou kartou/aplikáciou")
             if offer["pieces"] and offer["pieces"] >= 6:
                 flags.append(f"Multipack {offer['pieces']} ks")
             offer["flags"] = flags
@@ -606,10 +606,10 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raw = await self._fetch_offers(today)
             if not raw:
                 if self.data:
-                    _LOGGER.warning("Žádný zdroj nevrátil akce, ponechávám poslední data")
+                    _LOGGER.warning("Žiaden zdroj nevrátil akcie, ponechávam posledné dáta")
                     return self.data
                 raise UpdateFailed(
-                    "Nepodařilo se načíst žádné akce na pivo (zdroje: "
+                    "Nepodarilo sa načítať žiadne akcie na pivo (zdroje: "
                     + ", ".join(f"{k}: {v['errors'][:1]}" for k, v in self._status.items())
                     + ")"
                 )
@@ -629,7 +629,7 @@ class BeerDealsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return result
 
     async def async_relocate(self) -> None:
-        """Přepočítá vzdálenosti po změně polohy bez nového stahování akcí."""
+        """Prepočíta vzdialenosti po zmene polohy bez nového sťahovania akcií."""
         now = dt_util.utcnow()
         if not self._raw_offers or (
             self._last_relocate and now - self._last_relocate < timedelta(minutes=10)

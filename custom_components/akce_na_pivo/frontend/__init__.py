@@ -1,4 +1,4 @@
-"""Lovelace karta dodávaná s integrací – načte se automaticky."""
+"""Lovelace karta dodávaná s integráciou – načíta sa automaticky."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ DATA_REGISTERED = "akce_na_pivo_card_registered"
 
 
 async def async_register_card(hass: HomeAssistant) -> None:
-    """Zpřístupní kartu na /akce_na_pivo/akce-na-pivo-card.js a přidá ji do frontendu."""
+    """Sprístupní kartu na /akce_na_pivo/akce-na-pivo-card.js a pridá ju do frontendu."""
     if hass.data.get(DATA_REGISTERED):
         return
     hass.data[DATA_REGISTERED] = True
@@ -33,9 +33,9 @@ async def async_register_card(hass: HomeAssistant) -> None:
     )
     if DATA_EXTRA_MODULE_URL not in hass.data:
         _LOGGER.warning(
-            "Frontend není načtený – kartu přidejte ručně jako zdroj %s/%s", URL_BASE, CARD_FILE
+            "Frontend nie je načítaný – kartu pridajte ručne ako zdroj %s/%s", URL_BASE, CARD_FILE
         )
         return
-    # ?v= zajistí, že prohlížeč po aktualizaci integrace načte novou verzi karty
+    # ?v= zaistí, že prehliadač po aktualizácii integrácie načíta novú verziu karty
     add_extra_js_url(hass, f"{URL_BASE}/{CARD_FILE}?v={version}")
-    _LOGGER.debug("Karta akce-na-pivo-card zaregistrována (v%s)", version)
+    _LOGGER.debug("Karta akce-na-pivo-card zaregistrovaná (v%s)", version)

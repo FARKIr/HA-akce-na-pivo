@@ -1,4 +1,4 @@
-"""Dohledání nejbližších poboček obchodních řetězců přes OpenStreetMap."""
+"""Dohľadanie najbližších pobočiek obchodných reťazcov cez OpenStreetMap."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 def in_country(lat: float | None, lon: float | None, country: str = DEFAULT_COUNTRY) -> bool:
-    """Hrubá kontrola, zda souřadnice leží v obdélníku kolem dané země (CZ/SK)."""
+    """Hrubá kontrola, či súradnice ležia v obdĺžniku okolo danej krajiny (CZ/SK)."""
     if lat is None or lon is None:
         return False
     lat_min, lat_max, lon_min, lon_max = COUNTRIES[country]["bbox"]
@@ -63,9 +63,9 @@ async def fetch_stores(
     radius_km: float,
     country: str = DEFAULT_COUNTRY,
 ) -> list[dict[str, Any]]:
-    """Stáhne obchody v okolí (jedním dotazem) a přiřadí je k řetězcům."""
+    """Stiahne obchody v okolí (jedným dopytom) a priradí ich k reťazcom."""
     radius_m = int(max(1.0, radius_km) * 1000)
-    # jen obchody uvnitř hranic zvolené země (u hranic by jinak přišly i pobočky v sousední zemi)
+    # len obchody vnútri hraníc zvolenej krajiny (pri hraniciach by inak prišli aj pobočky v susednej krajine)
     query = (
         "[out:json][timeout:60];"
         f'area["ISO3166-1"="{country}"][admin_level=2]->.land;'
@@ -86,7 +86,7 @@ async def fetch_stores(
             break
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as err:
             last_error = err
-            _LOGGER.debug("Overpass %s selhal: %s", url, err)
+            _LOGGER.debug("Overpass %s zlyhal: %s", url, err)
     else:
         raise RuntimeError(f"OpenStreetMap (Overpass) nedostupné: {last_error}")
 
@@ -117,7 +117,7 @@ async def fetch_stores(
 
 
 async def reverse_geocode(session: aiohttp.ClientSession, lat: float, lon: float) -> str:
-    """Adresa z Nominatimu pro pobočky, které v OSM adresu nemají."""
+    """Adresa z Nominatimu pre pobočky, ktoré v OSM adresu nemajú."""
     try:
         async with session.get(
             NOMINATIM_REVERSE_URL,
@@ -126,7 +126,7 @@ async def reverse_geocode(session: aiohttp.ClientSession, lat: float, lon: float
                 "lat": lat,
                 "lon": lon,
                 "zoom": 18,
-                "accept-language": "cs",
+                "accept-language": "sk,cs;q=0.8,en;q=0.5",
             },
             headers={"User-Agent": OSM_USER_AGENT},
             timeout=aiohttp.ClientTimeout(total=20),
@@ -134,7 +134,7 @@ async def reverse_geocode(session: aiohttp.ClientSession, lat: float, lon: float
             resp.raise_for_status()
             data = await resp.json(content_type=None)
     except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as err:
-        _LOGGER.debug("Nominatim selhal: %s", err)
+        _LOGGER.debug("Nominatim zlyhal: %s", err)
         return ""
     addr = data.get("address") or {}
     street = addr.get("road") or addr.get("pedestrian") or addr.get("suburb") or ""

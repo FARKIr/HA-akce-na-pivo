@@ -1,4 +1,4 @@
-"""Binární senzor – je v akci pivo pod nastaveným limitem?"""
+"""Binárny senzor – je v akcii pivo pod nastaveným limitom?"""
 
 from __future__ import annotations
 

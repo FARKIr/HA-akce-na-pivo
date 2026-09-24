@@ -1,11 +1,11 @@
-"""Obecný parser akčních nabídek pro weby bez známé struktury.
+"""Všeobecný parser akciových ponúk pre weby bez známej štruktúry.
 
-Používá se pro Kompas Slev, AkcniCeny.cz, Cenito a vlastní URL zadané uživatelem.
-Zkouší postupně:
-  1. strukturovaná data schema.org (JSON-LD: Product / Offer / ItemList),
+Používa sa pre Kompas Slev, AkcniCeny.cz, Cenito, slovenské weby a vlastné URL zadané používateľom.
+Skúša postupne:
+  1. štruktúrované dáta schema.org (JSON-LD: Product / Offer / ItemList),
   2. JSON vložený do stránky (Next.js __NEXT_DATA__, Nuxt, application/json),
-  3. heuristiku nad HTML – nejmenší blok, který obsahuje cenu (Kč nebo €) a název řetězce.
-Modul nezávisí na Home Assistantu.
+  3. heuristiku nad HTML – najmenší blok, ktorý obsahuje cenu (Kč alebo €) a názov reťazca.
+Modul nezávisí na Home Assistante.
 """
 
 from __future__ import annotations

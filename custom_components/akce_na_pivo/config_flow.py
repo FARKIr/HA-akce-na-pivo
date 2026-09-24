@@ -1,4 +1,4 @@
-"""Nastavení integrace Akce na pivo přes UI."""
+"""Nastavenie integrácie Akcie na pivo cez UI."""
 
 from __future__ import annotations
 
@@ -74,9 +74,9 @@ def _country_schema(values: dict[str, Any]) -> vol.Schema:
 def _schema(values: dict[str, Any], country: str) -> vol.Schema:
     info = COUNTRIES[country]
     sources = country_sources(country)
-    brand_options = [selector.SelectOptionDict(value=ALL_BRANDS, label="🍺 Všechna piva v akci")]
+    brand_options = [selector.SelectOptionDict(value=ALL_BRANDS, label="🍺 Všetky pivá v akcii")]
     brand_options += [selector.SelectOptionDict(value=b, label=b) for b in KNOWN_BRANDS]
-    # vlastní značky zadané dříve musí zůstat mezi možnostmi
+    # vlastné značky zadané skôr musia zostať medzi možnosťami
     for brand in values.get(CONF_BRANDS, []):
         if brand != ALL_BRANDS and brand not in KNOWN_BRANDS:
             brand_options.append(selector.SelectOptionDict(value=brand, label=brand))
@@ -201,7 +201,7 @@ def _clean(user_input: dict[str, Any], country: str) -> dict[str, Any]:
     data[CONF_COUNTRY] = country
     brands: list[str] = []
     for raw in data.get(CONF_BRANDS, []):
-        # vlastní hodnotu lze zadat i jako "Značka1, Značka2"
+        # vlastnú hodnotu možno zadať aj ako "Značka1, Značka2"
         for brand in str(raw).split(","):
             brand = brand.strip()
             if brand and brand not in brands:
@@ -221,7 +221,7 @@ def _clean(user_input: dict[str, Any], country: str) -> dict[str, Any]:
 
 
 class AkceNaPivoConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Průvodce nastavením."""
+    """Sprievodca nastavením."""
 
     VERSION = 1
 
@@ -230,7 +230,7 @@ class AkceNaPivoConfigFlow(ConfigFlow, domain=DOMAIN):
         self._country = DEFAULT_COUNTRY
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Krok 1: název a země (Česko / Slovensko)."""
+        """Krok 1: názov a krajina (Česko / Slovensko)."""
         if user_input is not None:
             self._title = user_input.get(CONF_NAME) or NAME
             self._country = user_input.get(CONF_COUNTRY) or DEFAULT_COUNTRY
@@ -240,7 +240,7 @@ class AkceNaPivoConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_settings(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Krok 2: značky, zdroje a další nastavení pro zvolenou zemi."""
+        """Krok 2: značky, zdroje a ďalšie nastavenia pre zvolenú krajinu."""
         errors: dict[str, str] = {}
         if user_input is not None:
             data = _clean(user_input, self._country)
@@ -262,7 +262,7 @@ class AkceNaPivoConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class AkceNaPivoOptionsFlow(OptionsFlow):
-    """Změna nastavení."""
+    """Zmena nastavenia."""
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}

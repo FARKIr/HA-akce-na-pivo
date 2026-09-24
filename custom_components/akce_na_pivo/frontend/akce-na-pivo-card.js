@@ -1,8 +1,8 @@
 /*
- * Akce na pivo – Lovelace karta (custom:akce-na-pivo-card)
- * Dodává ji integrace "akce_na_pivo" a Home Assistant ji načte automaticky
- * z /akce_na_pivo/akce-na-pivo-card.js – není potřeba přidávat zdroj ručně.
- * Zobrazuje N nejlevnějších akcí na pivo, obchod, adresu, vzdálenost, zdroj a mapu.
+ * Akcie na pivo – Lovelace karta (custom:akce-na-pivo-card)
+ * Dodáva ju integrácia "akce_na_pivo" a Home Assistant ju načíta automaticky
+ * z /akce_na_pivo/akce-na-pivo-card.js – nie je potrebné pridávať zdroj ručne.
+ * Zobrazuje N najlacnejších akcií na pivo, obchod, adresu, vzdialenosť, zdroj a mapu.
  */
 
 const CARD_VERSION = "1.2.0";
@@ -12,7 +12,7 @@ const LEAFLET_JS = `https://cdn.jsdelivr.net/npm/leaflet@${LEAFLET_VERSION}/dist
 const LEAFLET_CSS = `https://cdn.jsdelivr.net/npm/leaflet@${LEAFLET_VERSION}/dist/leaflet.css`;
 
 console.info(
-  `%c AKCE-NA-PIVO-CARD %c v${CARD_VERSION} `,
+  `%c AKCIE-NA-PIVO-CARD %c v${CARD_VERSION} `,
   "color:#fff;background:#d98e04;font-weight:700",
   "color:#d98e04;background:#fff3d6"
 );
@@ -28,7 +28,7 @@ function loadLeaflet() {
       script.onload = () => (window.L ? resolve(window.L) : reject(new Error("Leaflet")));
       script.onerror = () => {
         leafletPromise = undefined;
-        reject(new Error("Leaflet se nepodařilo načíst"));
+        reject(new Error("Leaflet sa nepodarilo načítať"));
       };
       document.head.appendChild(script);
     });
@@ -39,10 +39,10 @@ function loadLeaflet() {
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
-const money = (value, symbol = "Kč") =>
+const money = (value, symbol = "€", locale = "sk-SK") =>
   value === null || value === undefined || value === ""
     ? "–"
-    : `${Number(value).toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${symbol}`;
+    : `${Number(value).toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${symbol}`;
 
 const shortDate = (iso) => {
   if (!iso) return "";
@@ -78,9 +78,9 @@ class AkceNaPivoCard extends HTMLElement {
   }
 
   setConfig(config) {
-    if (!config || !config.entity) throw new Error("Zadejte entitu (sensor Nejlevnější pivo)");
+    if (!config || !config.entity) throw new Error("Zadajte entitu (senzor Najlacnejšie pivo)");
     this._config = {
-      title: "🍺 Nejlevnější pivo",
+      title: "🍺 Najlacnejšie pivo",
       count: 5,
       show_map: true,
       show_images: true,
@@ -127,12 +127,14 @@ class AkceNaPivoCard extends HTMLElement {
     if (!this._config || !this._hass) return;
     const state = this._hass.states[this._config.entity];
     if (!state) {
-      this.shadowRoot.innerHTML = `<ha-card><div class="warn">Entita ${esc(this._config.entity)} nenalezena</div></ha-card>`;
+      this.shadowRoot.innerHTML = `<ha-card><div class="warn">Entita ${esc(this._config.entity)} nebola nájdená</div></ha-card>`;
       return;
     }
     const { offers, upcoming, attrs } = this._offers();
     if (this._selected >= offers.length) this._selected = 0;
     const updated = attrs.updated ? new Date(attrs.updated) : null;
+    const isCZ = attrs.country === "CZ";
+    const locale = isCZ ? "cs-CZ" : "sk-SK";
 
     this.shadowRoot.innerHTML = `
       <style>${STYLE}</style>
@@ -142,16 +144,16 @@ class AkceNaPivoCard extends HTMLElement {
           <div>
             <div class="title">${esc(this._config.title)}</div>
             <div class="sub">
-              ${attrs.country ? `${FLAGS[attrs.country] || esc(attrs.country)} ` : ""}${attrs.value_type ? `řazeno: ${esc(attrs.value_type)}` : ""}
-              ${updated ? ` · aktualizace ${updated.toLocaleString("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}
+              ${attrs.country ? `${FLAGS[attrs.country] || esc(attrs.country)} ` : ""}${attrs.value_type ? `radené: ${esc(attrs.value_type)}` : ""}
+              ${updated ? ` · aktualizácia ${updated.toLocaleString(locale, { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}
             </div>
           </div>
-          <button class="icon-btn" id="refresh" title="Aktualizovat"><ha-icon icon="mdi:refresh"></ha-icon></button>
+          <button class="icon-btn" id="refresh" title="Aktualizovať"><ha-icon icon="mdi:refresh"></ha-icon></button>
         </div>
-        ${offers.length === 0 ? `<div class="empty">Žádné akce na vybrané pivo 😢</div>` : ""}
+        ${offers.length === 0 ? `<div class="empty">Žiadne akcie na vybrané pivo 😢</div>` : ""}
         ${this._config.show_map && offers.some((o) => o.latitude) ? `<div id="map" style="height:${Number(this._config.map_height) || 240}px"></div>` : ""}
         <div class="list">${offers.map((o, i) => this._row(o, i)).join("")}</div>
-        ${upcoming.length ? `<div class="section">Připravované akce</div><div class="list">${upcoming.map((o, i) => this._row(o, i, true)).join("")}</div>` : ""}
+        ${upcoming.length ? `<div class="section">Pripravované akcie</div><div class="list">${upcoming.map((o, i) => this._row(o, i, true)).join("")}</div>` : ""}
       </ha-card>`;
 
     this.shadowRoot.getElementById("refresh")?.addEventListener("click", () =>
@@ -170,11 +172,13 @@ class AkceNaPivoCard extends HTMLElement {
   _row(o, i, upcoming = false) {
     const cfg = this._config;
     const selected = !upcoming && i === this._selected;
-    const flags = cfg.show_flags ? (o.flags || []).map((f) => `<span class="chip ${/Nejlevněji|Pod limitem/.test(f) ? "hot" : ""}">${esc(f)}</span>`).join("") : "";
+    const flags = cfg.show_flags ? (o.flags || []).map((f) => `<span class="chip ${/Najlacnejšie|Nejlevněji|Pod limitom|Pod limitem/.test(f) ? "hot" : ""}">${esc(f)}</span>`).join("") : "";
+    const isCZ = this._hass?.states[this._config.entity]?.attributes?.country === "CZ";
+    const locale = isCZ ? "cs-CZ" : "sk-SK";
     const where = [
       o.store_name && o.store_name !== o.shop ? esc(o.store_name) : "",
       cfg.show_address && o.address ? esc(o.address) : "",
-      o.distance_km != null ? `<b>${Number(o.distance_km).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} km</b>` : o.online ? "online" : "",
+      o.distance_km != null ? `<b>${Number(o.distance_km).toLocaleString(locale, { maximumFractionDigits: 1 })} km</b>` : o.online ? "online" : "",
     ].filter(Boolean).join(" · ");
     const validity = o.valid_from && o.valid_to
       ? `${shortDate(o.valid_from)} – ${shortDate(o.valid_to)}`
@@ -191,7 +195,7 @@ class AkceNaPivoCard extends HTMLElement {
           <div class="meta">${validity ? `<span class="valid">${validity}</span>` : ""}${flags}${this._sourceChips(o)}</div>
           ${selected ? `<div class="links">
               ${o.map_url ? `<a href="${esc(o.map_url)}" target="_blank" rel="noopener">Mapy.com</a>` : ""}
-              ${o.navigate_url ? `<a href="${esc(o.navigate_url)}" target="_blank" rel="noopener">Navigovat</a>` : ""}
+              ${o.navigate_url ? `<a href="${esc(o.navigate_url)}" target="_blank" rel="noopener">Navigovať</a>` : ""}
               ${o.url ? `<a href="${esc(o.url)}" target="_blank" rel="noopener">Leták / kupi.cz</a>` : ""}
             </div>` : ""}
         </div>
@@ -206,7 +210,8 @@ class AkceNaPivoCard extends HTMLElement {
 
   _money(value) {
     const attrs = this._hass?.states[this._config.entity]?.attributes || {};
-    return money(value, attrs.currency_symbol || "Kč");
+    const isCZ = attrs.country === "CZ";
+    return money(value, attrs.currency_symbol || (isCZ ? "Kč" : "€"), isCZ ? "cs-CZ" : "sk-SK");
   }
 
   _sourceChips(o) {
@@ -277,7 +282,7 @@ class AkceNaPivoCard extends HTMLElement {
     if (location?.latitude != null) {
       L.marker([location.latitude, location.longitude], {
         icon: L.divIcon({ className: "", html: `<div class="pin home">🏠</div>`, iconSize: [28, 28], iconAnchor: [14, 14] }),
-      }).addTo(map).bindPopup("Vaše poloha");
+      }).addTo(map).bindPopup("Vaša poloha");
       bounds.push([location.latitude, location.longitude]);
     }
     if (bounds.length > 1) map.fitBounds(bounds, { padding: [24, 24], maxZoom: 15 });
@@ -360,17 +365,17 @@ class AkceNaPivoCardEditor extends HTMLElement {
 }
 
 const LABELS = {
-  entity: "Entita (senzor Nejlevnější pivo)",
+  entity: "Entita (senzor Najlacnejšie pivo)",
   title: "Nadpis",
-  count: "Počet zobrazených nabídek",
-  sort: "Řazení v kartě",
-  show_map: "Zobrazit mapu",
+  count: "Počet zobrazených ponúk",
+  sort: "Radenie v karte",
+  show_map: "Zobraziť mapu",
   map_height: "Výška mapy (px)",
-  show_images: "Obrázky produktů",
+  show_images: "Obrázky produktov",
   show_address: "Adresa obchodu",
-  show_flags: "Štítky (sleva, historické minimum…)",
-  show_source: "Zdroj akce (Kupi, Kompas Slev…)",
-  show_upcoming: "Zobrazit připravované akce",
+  show_flags: "Štítky (zľava, historické minimum…)",
+  show_source: "Zdroj akcie (Kupi, Kompas Zliav…)",
+  show_upcoming: "Zobraziť pripravované akcie",
 };
 
 const EDITOR_SCHEMA = [
@@ -387,10 +392,10 @@ const EDITOR_SCHEMA = [
           select: {
             mode: "dropdown",
             options: [
-              { value: "", label: "Podle integrace" },
+              { value: "", label: "Podľa integrácie" },
               { value: "unit", label: "Cena za 0,5 l" },
-              { value: "price", label: "Cena za balení" },
-              { value: "distance", label: "Vzdálenost" },
+              { value: "price", label: "Cena za balenie" },
+              { value: "distance", label: "Vzdialenosť" },
             ],
           },
         },
@@ -413,8 +418,8 @@ window.customCards = window.customCards || [];
 if (!window.customCards.some((c) => c.type === "akce-na-pivo-card")) {
   window.customCards.push({
     type: "akce-na-pivo-card",
-    name: "Akce na pivo",
-    description: "Nejlevnější pivo v akci – seznam obchodů, ceny a mapa.",
+    name: "Akcie na pivo",
+    description: "Najlacnejšie pivo v akcii – zoznam obchodov, ceny a mapa.",
     preview: true,
     documentationURL: "https://github.com/joshuaaaaa/HA-akce-na-pivo",
   });

@@ -1,157 +1,157 @@
-# 🍺 Akce na pivo – Home Assistant
+# 🍺 Akcie na pivo – Home Assistant
 
-Integrace pro Home Assistant, která každý den (nebo v čase, který si nastavíte) zjistí,
-**kde je nejlevnější pivo v akci**, najde **nejbližší pobočku** daného obchodu k vašemu
-domovu nebo k poloze vašeho telefonu a ukáže ji **na mapě**. Součástí je samostatná
+Integrácia pre Home Assistant, ktorá každý deň (alebo v čase, ktorý si nastavíte) zistí,
+**kde je najlacnejšie pivo v akcii**, nájde **najbližšiu predajňu** daného obchodu k vášmu
+domovu alebo k polohe vášho telefónu a ukáže ju **na mape**. Súčasťou je samostatná
 Lovelace karta `akce-na-pivo-card`.
 
-- **Česko 🇨🇿 nebo Slovensko 🇸🇰**: zemi vyberete při přidání integrace.
-- Ceny z více webů s letákovými akcemi (Albert, Billa, Globus, Kaufland, Lidl, Penny, Tesco,
+- **Česko 🇨🇿 alebo Slovensko 🇸🇰**: krajinu vyberiete pri pridaní integrácie.
+- Ceny z viacerých webov s letákovými akciami (Albert, Billa, Globus, Kaufland, Lidl, Penny, Tesco,
   Makro, Norma, COOP, JIP, Hruška, na Slovensku COOP Jednota, Terno, Fresh, Kraj, Metro…).
-  Stejná akce nalezená na víc webech se sloučí.
-- Pobočky, adresy a otevírací doby z OpenStreetMap (Overpass + Nominatim)
+  Rovnaká akcia nájdená na viacerých weboch sa zlúči.
+- Predajne, adresy a otváracie hodiny z OpenStreetMap (Overpass + Nominatim)
 
-## Česko, nebo Slovensko
+## Česko, alebo Slovensko
 
-Při přidání integrace nejdřív zvolíte **zemi**:
+Pri pridaní integrácie si najskôr zvolíte **krajinu**:
 
 | | 🇨🇿 Česko | 🇸🇰 Slovensko |
 |---|---|---|
-| Weby s akcemi | Kupi.cz, Kompas Slev, AkcniCeny.cz, Cenito | Zlacnene.sk, Kimbino.sk, Letakomat.sk, KdeJeAkcia.sk, Kompas Zliav, Kupino.sk, AkčnéLetáky.sk, Promotheus.sk |
-| Měna senzorů | CZK (Kč) | EUR (€) |
-| Výchozí značky | Pilsner Urquell, Kozel, Gambrinus | Zlatý Bažant, Šariš, Corgoň |
-| Výchozí limit za 0,5 l | 15 Kč | 0,70 € |
+| Weby s akciami | Kupi.cz, Kompas Slev, AkcniCeny.cz, Cenito | Zlacnene.sk, Kimbino.sk, Letakomat.sk, KdeJeAkcia.sk, Kompas Zliav, Kupino.sk, AkčnéLetáky.sk, Promotheus.sk |
+| Mena senzorov | CZK (Kč) | EUR (€) |
+| Predvolené značky | Pilsner Urquell, Kozel, Gambrinus | Zlatý Bažant, Šariš, Corgoň |
+| Predvolený limit za 0,5 l | 15 Kč | 0,70 € |
 
-- Pobočky z OpenStreetMap se berou **jen uvnitř hranic zvolené země** (Overpass
-  `area["ISO3166-1"="CZ"/"SK"]`). U hranic se tak nenabídne obchod v sousední zemi.
-- Když je sledovaný telefon nebo osoba mimo zvolenou zemi, vzdálenosti se počítají od domova HA.
-- Nabídky v jiné měně (Kč na Slovensku, € v Česku) se zahodí.
-- **Chcete obě země?** Přidejte integraci dvakrát, jednou pro Česko a jednou pro Slovensko.
-  Každá bude mít vlastní senzory i kartu. Když bydlíte u hranic, nastavte u slovenské
-  varianty dostatečnou **vzdálenost poboček** (až 50 km). Obchody se pak hledají na Slovensku
-  v tomto okruhu od vašeho domova v ČR.
-- Slovenské značky v seznamu: Zlatý Bažant, Šariš, Corgoň, Topvar, Smädný mních, Kelt, Steiger,
-  Martiner, Urpiner, Popper (a samozřejmě české značky nebo vlastní).
+- Predajne z OpenStreetMap sa načítavajú **iba vnútri hraníc zvolenej krajiny** (Overpass
+  `area["ISO3166-1"="CZ"/"SK"]`). Pri hraniciach sa tak neponúkne predajňa v susednej krajine.
+- Keď je sledovaný telefón alebo osoba mimo zvolenej krajiny, vzdialenosti sa počítajú od domova HA.
+- Ponuky v inej mene (Kč na Slovensku, € v Česku) sa zahodia.
+- **Chcete obe krajiny?** Pridajte integráciu dvakrát – raz pre Česko a raz pre Slovensko.
+  Každá bude mať vlastné senzory aj kartu. Keď bývate blízko hraníc, nastavte pri slovenskej
+  variante dostatočnú **vzdialenosť predajní** (až 50 km). Obchody sa potom hľadajú na Slovensku
+  v tomto okruhu od vášho domova v ČR (alebo naopak).
+- Slovenské značky v zozname: Zlatý Bažant, Šariš, Corgoň, Topvar, Smädný mních, Kelt, Steiger,
+  Martiner, Urpiner, Popper (a samozrejme české značky alebo vlastné).
 
-## Zdroje akcí
+## Zdroje akcií
 
-| Zdroj | Jak se čte | Výchozí adresy |
+| Zdroj | Ako sa číta | Východiskové adresy |
 |---|---|---|
-| **Kupi.cz** | vlastní parser stránek kupi.cz + JSON-LD | `/slevy/pivo` (stránkování), `/sleva/pivo-<značka>`, `/hledej?f=<značka>` |
-| **Kompas Slev** | obecný parser | `kompasslev.cz/produkty/pivo`, `kompasslev.cz/produkty/<značka>` |
-| **AkcniCeny.cz** | obecný parser | vyhledávání `pivo` / `<značka>` |
-| **Cenito** | obecný parser | vyhledávání `pivo` / `<značka>` |
-| 🇸🇰 **Zlacnene.sk** | obecný parser | `/akciovy-tovar/napoje-alkoholicke/pivo/`, `/akciovy-tovar/znacka-<značka>/` |
-| 🇸🇰 **Kimbino.sk** | obecný parser | `/produkty/pivo/`, `/produkty/<značka>/` |
-| 🇸🇰 **Letakomat.sk** | obecný parser | `/hladat/?q=pivo`, `/hladat/?q=<značka>` |
-| 🇸🇰 **KdeJeAkcia.sk** | obecný parser | `/kde-je-pivo-v-akcii`, `/kde-je-<značka>-v-akcii` |
-| 🇸🇰 **Kompas Zliav** | obecný parser | `kompaszliav.sk/produkty/pivo`, `/produkty/<značka>` |
-| 🇸🇰 **Kupino.sk** | obecný parser | `/akcia/pivo`, `/akcia/<značka>` |
-| 🇸🇰 **AkčnéLetáky.sk** | obecný parser | `/akcie/Pivo`, `/akcie/<značka>` |
-| 🇸🇰 **Promotheus.sk** | obecný parser | `promotheus.sk/pivo`, `promotheus.sk/<značka>` |
-| **Vlastní URL** | obecný parser | libovolné stránky zadané v nastavení |
+| **Kupi.cz** | vlastný parser stránok kupi.cz + JSON-LD | `/slevy/pivo` (stránkovanie), `/sleva/pivo-<značka>`, `/hledej?f=<značka>` |
+| **Kompas Slev** | všeobecný parser | `kompasslev.cz/produkty/pivo`, `kompasslev.cz/produkty/<značka>` |
+| **AkcniCeny.cz** | všeobecný parser | vyhľadávanie `pivo` / `<značka>` |
+| **Cenito** | všeobecný parser | vyhľadávanie `pivo` / `<značka>` |
+| 🇸🇰 **Zlacnene.sk** | všeobecný parser | `/akciovy-tovar/napoje-alkoholicke/pivo/`, `/akciovy-tovar/znacka-<značka>/` |
+| 🇸🇰 **Kimbino.sk** | všeobecný parser | `/produkty/pivo/`, `/produkty/<značka>/` |
+| 🇸🇰 **Letakomat.sk** | všeobecný parser | `/hladat/?q=pivo`, `/hladat/?q=<značka>` |
+| 🇸🇰 **KdeJeAkcia.sk** | všeobecný parser | `/kde-je-pivo-v-akcii`, `/kde-je-<značka>-v-akcii` |
+| 🇸🇰 **Kompas Zliav** | všeobecný parser | `kompaszliav.sk/produkty/pivo`, `/produkty/<značka>` |
+| 🇸🇰 **Kupino.sk** | všeobecný parser | `/akcia/pivo`, `/akcia/<značka>` |
+| 🇸🇰 **AkčnéLetáky.sk** | všeobecný parser | `/akcie/Pivo`, `/akcie/<značka>` |
+| 🇸🇰 **Promotheus.sk** | všeobecný parser | `promotheus.sk/pivo`, `promotheus.sk/<značka>` |
+| **Vlastná URL** | všeobecný parser | ľubovoľné stránky zadané v nastavení |
 
-Zdroje zapínáte a vypínáte v nastavení integrace. **Obecný parser** zkouší postupně:
-1. strukturovaná data schema.org (JSON-LD `Product` / `Offer` / `ItemList`),
-2. JSON vložený do stránky (Next.js `__NEXT_DATA__` a jiný `application/json`),
-3. heuristiku nad HTML: najde nejmenší blok stránky, ve kterém je cena (Kč, nebo € na Slovensku) a název řetězce,
-   a z něj vezme název produktu, starou cenu, slevu, platnost a odkaz.
+Zdroje zapínate a vypínate v nastaveniach integrácie. **Všeobecný parser** skúša postupne:
+1. štruktúrované dáta schema.org (JSON-LD `Product` / `Offer` / `ItemList`),
+2. JSON vložený do stránky (Next.js `__NEXT_DATA__` a iný `application/json`),
+3. heuristiku nad HTML: nájde najmenší blok stránky, v ktorom je cena (€ na Slovensku alebo Kč v Česku) a názov reťazca,
+   a z neho vezme názov produktu, starú cenu, zľavu, platnosť a odkaz.
 
-> ⚠️ Weby se při vývoji nedaly otevřít, takže parser nebyl vyzkoušený na jejich skutečném
-> obsahu. Slovenské adresy a adresa Kompas Slev jsou ověřené přes vyhledávač. Adresy
-> AkcniCeny.cz a Cenito jsou odhad. Když některý zdroj nic nevrací, podívejte se na atribut
-> `sources` senzoru **Počet akcí**. Ukazuje pro každý zdroj počet akcí, funkční URL a chyby.
-> Správnou adresu pak zadejte do **Vlastní URL**. Adresa, která vrátí 404, se týden nezkouší.
+> ⚠️ Weby sa pri vývoji nedali priamo otvoriť, takže parser nebol testovaný na ich skutočnom
+> obsahu. Slovenské adresy a adresa Kompas Slev sú overené cez vyhľadávač. Adresy
+> AkcniCeny.cz a Cenito sú odhad. Keď niektorý zdroj nič nevracia, pozrite sa na atribút
+> `sources` senzora **Počet akcií**. Ukazuje pre každý zdroj počet akcií, funkčnú URL a chyby.
+> Správnu adresu potom zadajte do **Vlastné URL**. Adresa, ktorá vráti 404, sa týždeň neskúša.
 
-**Vlastní URL** (jedna na řádek) může obsahovat zástupné znaky:
-- `{query}` = název značky (`Pilsner+Urquell`), při „všech pivech“ `pivo`
-- `{slug}` = značka ve tvaru `pilsner-urquell`
+**Vlastná URL** (jedna na riadok) môže obsahovať zástupné znaky:
+- `{query}` = názov značky (`Pilsner+Urquell`), pri „všetkých pivách“ `pivo`
+- `{slug}` = značka v tvare `pilsner-urquell` alebo `zlaty-bazant`
 
 ```text
-https://kompasslev.cz/produkty/pivo?store=kaufland
-https://www.nejaky-web.cz/hledat?q={query}
+https://kompaszliav.sk/produkty/pivo?store=kaufland
+https://www.nejaky-web.sk/hladat?q={query}
 ```
 
-## Co umí
+## Čo dokáže
 
-| Funkce | Popis |
+| Funkcia | Popis |
 |---|---|
-| Výběr značek | Výběr ze seznamu (Pilsner Urquell, Kozel, Gambrinus, Radegast, Staropramen, Budvar, Bernard, Svijany…), **vlastní značka** (napište ji a potvrďte Enterem, jde zadat i víc značek oddělených čárkou), nebo **„Všechna piva v akci“** |
-| Čas kontroly | Denní kontrola v zadaný čas, volitelně navíc každých N hodin. Kdykoli ručně: tlačítko **Aktualizovat akce** nebo služba `akce_na_pivo.refresh` |
-| Poloha | Domov HA, nebo entita `person` / `device_tracker` / `zone` (GPS telefonu). Když se posunete o víc než 2 km, nejbližší pobočky se přepočítají |
-| TOP N | Počet zobrazených nejlevnějších nabídek volíte v nastavení (1–10, výchozí 5) |
-| Mapa a adresa | U každé nabídky je nejbližší pobočka: adresa, vzdálenost, GPS, otevírací doba a odkazy na Mapy.com a navigaci |
+| Výber značiek | Výber zo zoznamu (Zlatý Bažant, Šariš, Corgoň, Urpiner, Pilsner Urquell, Kozel, Radegast, Staropramen, Budvar…), **vlastná značka** (napíšte ju a potvrďte Enterom, dá sa zadať aj viac značiek oddelených čiarkou), alebo **„Všetky pivá v akcii“** |
+| Čas kontroly | Denná kontrola v zadaný čas, voliteľne navyše každých N hodín. Kedykoľvek ručne: tlačidlo **Aktualizovať akcie** alebo služba `akce_na_pivo.refresh` |
+| Poloha | Domov HA, alebo entita `person` / `device_tracker` / `zone` (GPS telefónu). Keď sa pohnete o viac ako 2 km, najbližšie predajne sa prepočítajú |
+| TOP N | Počet zobrazených najlacnejších ponúk volíte v nastaveniach (1–10, predvolených 5) |
+| Mapa a adresa | Pri každej ponuke je najbližšia predajňa: adresa, vzdialenosť, GPS, otváracie hodiny a odkazy na Mapy.com a navigáciu |
 
-### Další ukazatele, že je pivo opravdu levné
+### Ďalšie ukazovatele, že je pivo naozaj lacné
 
-- **Cena za 0,5 l**: přepočet i u multipacků (`8 × 0,5 l`), plechovek 0,33 l a PET 1,5 l. Podle toho se standardně řadí.
-- **Nejlevněji za posledních 120 dní**: integrace si ukládá historii cen a označí nabídku, která je na historickém minimu.
-- **Levnější než průměr**: o kolik Kč/0,5 l je nabídka levnější než průměr všech akcí na stejnou značku.
-- **Sleva ≥ 30 %** a odhad původní ceny.
-- **Pod limitem**: nastavíte si cenu za 0,5 l a dostanete událost `akce_na_pivo_levne_pivo` a zapne se binární senzor.
-- **Končí dnes / zítra**, **Platí od…** (připravované akce z nových letáků), **Jen s věrnostní kartou** (Lidl Plus, Clubcard, Můj Albert…), **Multipack**.
-- Filtry: vynechat nealko, vynechat akce jen s kartou, zobrazit jen obchody s pobočkou v okolí (limit km).
+- **Cena za 0,5 l**: prepočet aj pri multipackoch (`8 × 0,5 l`), plechovkách 0,33 l a fľašiach / PET 1,5 l. Podľa toho sa štandardne radí.
+- **Najlacnejšie za posledných 120 dní**: integrácia si ukladá históriu cien a označí ponuku, ktorá je na historickom minime.
+- **Lacnejšie než priemer**: o koľko €/0,5 l je ponuka lacnejšia než priemer všetkých akcií na rovnakú značku.
+- **Zľava ≥ 30 %** a odhad pôvodnej ceny.
+- **Pod limitom**: nastavíte si cenu za 0,5 l, dostanete udalosť `akce_na_pivo_levne_pivo` a zapne sa binárny senzor.
+- **Končí dnes / zajtra**, **Platí od…** (pripravované akcie z nových letákov), **Len s vernostnou kartou** (Lidl Plus, Clubcard, Moja Billa…), **Multipack**.
+- Filtre: vynechať nealko, vynechať akcie iba s kartou, zobraziť iba obchody s predajňou v okolí (limit km).
 
-## Instalace integrace
+## Inštalácia integrácie
 
 ### HACS
-1. HACS → Integrace → ⋮ → *Vlastní repozitáře* → `https://github.com/joshuaaaaa/HA-akce-na-pivo`, kategorie *Integrace*.
-2. Nainstalujte **Akce na pivo** a restartujte Home Assistant.
+1. HACS → Integrácie → ⋮ → *Vlastné repozitáre* → zadajte URL vášho forku repozitára, kategória *Integrácia*.
+2. Nainštalujte **Akcie na pivo** a reštartujte Home Assistant.
 
-### Ručně
-Zkopírujte `custom_components/akce_na_pivo` do `/config/custom_components/` a restartujte HA.
+### Ručne
+Skopírujte adresár `custom_components/akce_na_pivo` do vášho `/config/custom_components/` a reštartujte HA.
 
-Potom: **Nastavení → Zařízení a služby → Přidat integraci → Akce na pivo**.
-Všechno jde později změnit přes **Konfigurovat**.
+Potom: **Nastavenia → Zariadenia a služby → Pridať integráciu → Akcie na pivo**.
+Všetko sa dá neskôr zmeniť cez **Konfigurovať**.
 
-## Karta (součást custom component)
+## Karta (súčasť custom component)
 
-Karta `custom:akce-na-pivo-card` je přibalená přímo v integraci
-(`custom_components/akce_na_pivo/frontend/akce-na-pivo-card.js`). **Nic nekopírujete ani
-nepřidáváte do zdrojů**: integrace ji sama zpřístupní na `/akce_na_pivo/akce-na-pivo-card.js`
-a zaregistruje ji ve frontendu. Po instalaci a restartu stačí obnovit prohlížeč (Ctrl+F5)
-a v ovládacím panelu přidat kartu **Akce na pivo**. Má i grafický editor.
+Karta `custom:akce-na-pivo-card` je pribalená priamo v integrácii
+(`custom_components/akce_na_pivo/frontend/akce-na-pivo-card.js`). **Nič nekopírujete ani
+nepridávate do zdrojov**: integrácia ju sama sprístupní na `/akce_na_pivo/akce-na-pivo-card.js`
+a zaregistruje ju vo frontende. Po inštalácii a reštarte stačí obnoviť prehliadač (Ctrl+F5)
+a na nástenku pridať kartu **Akcie na pivo**. Má aj grafický editor.
 
-Kdyby se karta v nabídce neobjevila (třeba bez `default_config`), přidejte zdroj ručně:
-**Nastavení → Ovládací panely → ⋮ → Zdroje** → URL `/akce_na_pivo/akce-na-pivo-card.js`,
+Keby sa karta v ponuke neobjavila (napríklad bez `default_config`), pridajte zdroj ručne:
+**Nastavenia → Ovládacie panely → ⋮ → Zdroje** → URL `/akce_na_pivo/akce-na-pivo-card.js`,
 typ *JavaScript modul*.
 
 ```yaml
 type: custom:akce-na-pivo-card
 entity: sensor.akce_na_pivo_nejlevnejsi_pivo
-title: 🍺 Nejlevnější pivo
-count: 5            # kolik nabídek zobrazit (1–10)
-sort: ""            # "" = podle integrace, nebo unit | price | distance
+title: 🍺 Najlacnejšie pivo
+count: 5            # koľko ponúk zobraziť (1–10)
+sort: ""            # "" = podľa integrácie, alebo unit | price | distance
 show_map: true
 map_height: 240
 show_images: true
 show_address: true
 show_flags: true
-show_source: true   # štítek, ze kterého webu akce pochází
+show_source: true   # štítok, z ktorého webu akcia pochádza
 show_upcoming: false
 ```
 
-Klepnutím na nabídku se na mapě zvýrazní obchod a objeví se odkazy **Mapy.com**,
-**Navigovat** a **Leták**. Mapa používá Leaflet z CDN. Když se nenačte, karta
-zobrazí vložený OpenStreetMap.
+Kliknutím na ponuku sa na mape zvýrazní predajňa a objavia sa odkazy **Mapy.com**,
+**Navigovať** a **Leták**. Mapa používa Leaflet z CDN. Keď sa nenačíta, karta
+zobrazí vložený OpenStreetMap iframe.
 
 ## Entity
 
 | Entita | Stav | Poznámka |
 |---|---|---|
-| `sensor.*_nejlevnejsi_pivo` | cena za 0,5 l (nebo za balení) | atribut `offers` = TOP N, `upcoming`, `brands`, `location`; zdroj dat pro kartu |
-| `sensor.*_nejlevnejsi_pivo_za_0_5_l` | Kč (€)/0,5 l | vhodné do grafu historie |
-| `sensor.*_pivo_1` … `_pivo_N` | cena balení | mají `latitude`/`longitude`, takže je zobrazí i standardní karta Mapa |
-| `sensor.*_<značka>` | cena | nejlevnější akce každé vybrané značky |
-| `binary_sensor.*_levne_pivo_pod_limitem` | on/off | je v akci pivo pod limitem? |
-| `button.*_aktualizovat_akce` | – | okamžitá aktualizace |
-| `sensor.*_pocet_akci` | počet | diagnostika: stav každého zdroje (akce, funkční URL, chyby) |
+| `sensor.*_nejlevnejsi_pivo` | cena za 0,5 l (alebo za balenie) | atribút `offers` = TOP N, `upcoming`, `brands`, `location`; zdroj dát pre kartu |
+| `sensor.*_nejlevnejsi_pivo_za_0_5_l` | € (Kč)/0,5 l | vhodné do grafu histórie |
+| `sensor.*_pivo_1` … `_pivo_N` | cena balenia | majú `latitude`/`longitude`, takže ich zobrazí aj štandardná karta Mapa |
+| `sensor.*_<značka>` | cena | najlacnejšia akcia každej vybranej značky |
+| `binary_sensor.*_levne_pivo_pod_limitem` | on/off | je v akcii pivo pod limitom? |
+| `button.*_aktualizovat_akce` | – | okamžitá aktualizácia |
+| `sensor.*_pocet_akci` | počet | diagnostika: stav každého zdroja (akcie, funkčné URL, chyby) |
 
-### Příklad automatizace – upozornění do mobilu
+### Príklad automatizácie – upozornenie do mobilu
 
 ```yaml
 automation:
-  - alias: Levné pivo
+  - alias: Lacné pivo v akcii
     trigger:
       - platform: event
         event_type: akce_na_pivo_levne_pivo
@@ -166,7 +166,7 @@ automation:
             platí do {{ trigger.event.data.valid_to }}
 ```
 
-### Standardní karta Mapa
+### Štandardná karta Mapa
 
 ```yaml
 type: map
@@ -179,19 +179,19 @@ entities:
 
 ## Poznámky
 
-- Integrace stahuje veřejné stránky šetrně: pár stránek jednou denně, s pauzami mezi požadavky.
-  Chyba jednoho zdroje neshodí ostatní. Když kupi.cz změní vzhled stránek, bude potřeba upravit
-  `kupi.py`. Ostatní weby čte obecný parser `generic.py`.
-- XML feed kupi.cz je určený pro obchodní partnery, ne pro veřejné použití, proto ho integrace nepoužívá.
-- Kupi.cz uvádí akce za celý řetězec. Pobočka na mapě je **nejbližší prodejna daného řetězce**,
-  konkrétní akce se tam ale může lišit (třeba hypermarket vs. supermarket).
-- Pobočky z OpenStreetMap se ukládají do mezipaměti na 7 dní a obnoví se, když se změní poloha.
+- Integrácia sťahuje verejné stránky šetrne: zopár stránok raz denne, s pauzami medzi požiadavkami.
+  Chyba jedného zdroja neovplyvní ostatné. Keď kupi.cz zmení vzhľad stránok, bude potrebné upraviť
+  `kupi.py`. Ostatné weby číta všeobecný parser `generic.py`.
+- XML feed kupi.cz je určený pre obchodných partnerov, nie pre verejné použitie, preto ho integrácia nepoužíva.
+- Kupi.cz uvádza akcie za celý reťazec. Pobočka na mape je **najbližšia predajňa daného reťazca**,
+  konkrétna akcia sa tam ale môže líšiť (napríklad hypermarket vs. supermarket).
+- Predajne z OpenStreetMap sa ukladajú do vyrovnávacej pamäte na 7 dní a obnovia sa pri zmene polohy.
 
-## Vývoj
+## Vývoj a testovanie
 
 ```bash
 pip install beautifulsoup4 pytest
 pytest tests/test_kupi.py tests/test_generic.py   # parsery bez Home Assistantu
 pip install pytest-homeassistant-custom-component
-pytest tests                         # včetně testu integrace
+pytest tests                                      # vrátane testu integrácie
 ```

@@ -1,6 +1,6 @@
 {
   "domain": "akce_na_pivo",
-  "name": "Akce na pivo",
+  "name": "Akcie na pivo",
   "after_dependencies": [
     "frontend"
   ],

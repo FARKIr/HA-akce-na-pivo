@@ -1,13 +1,13 @@
-"""Constants for the Akce na pivo integration."""
+"""Konštanty pre integráciu Akcie na pivo."""
 
 from __future__ import annotations
 
 DOMAIN = "akce_na_pivo"
-NAME = "Akce na pivo"
+NAME = "Akcie na pivo"
 
 PLATFORMS = ["sensor", "binary_sensor", "button"]
 
-# Config / options keys
+# Kľúče konfigurácie / možností
 CONF_BRANDS = "brands"
 CONF_LOCATION_ENTITY = "location_entity"
 CONF_UPDATE_TIME = "update_time"
@@ -23,8 +23,8 @@ CONF_EXCLUDE_NONALCOHOLIC = "exclude_nonalcoholic"
 CONF_MAX_PAGES = "max_pages"
 
 SORT_UNIT = "unit"  # cena za 0,5 l
-SORT_PRICE = "price"  # cena za balení
-SORT_DISTANCE = "distance"  # nejbližší obchod, pak cena
+SORT_PRICE = "price"  # cena za balenie
+SORT_DISTANCE = "distance"  # najbližší obchod, potom cena
 SORT_OPTIONS = [SORT_UNIT, SORT_PRICE, SORT_DISTANCE]
 
 ALL_BRANDS = "__all__"
@@ -44,7 +44,7 @@ DEFAULT_MAX_PAGES = 6
 
 MAX_TOP_COUNT = 10
 
-# Známé značky: zobrazovaný název -> (aliasy pro hledání v názvu produktu, slug na kupi.cz)
+# Známe značky: zobrazovaný názov -> (aliasy pre hľadanie v názve produktu, slug na kupi.cz)
 KNOWN_BRANDS: dict[str, tuple[tuple[str, ...], str]] = {
     "Pilsner Urquell": (("pilsner urquell", "plzensky prazdroj"), "pivo-pilsner-urquell"),
     "Gambrinus": (("gambrinus",), "pivo-gambrinus"),
@@ -68,7 +68,7 @@ KNOWN_BRANDS: dict[str, tuple[tuple[str, ...], str]] = {
     "Radler": (("radler",), "pivo-radler"),
     "Birell (nealko)": (("birell",), "pivo-birell"),
     "Heineken": (("heineken",), "pivo-heineken"),
-    "Plzeň (vše z Prazdroje)": (("pilsner", "gambrinus", "kozel", "radegast"), ""),
+    "Plzeň (všetko z Prazdroja)": (("pilsner", "gambrinus", "kozel", "radegast"), ""),
     # slovenské značky
     "Zlatý Bažant": (("zlaty bazant", "golden pheasant"), "pivo-zlaty-bazant"),
     "Šariš": (("saris",), "pivo-saris"),
@@ -82,7 +82,7 @@ KNOWN_BRANDS: dict[str, tuple[tuple[str, ...], str]] = {
     "Popper": (("popper",), "pivo-popper"),
 }
 
-# Slova, podle kterých poznáme nealko pivo (porovnává se s textem bez diakritiky)
+# Slová, podľa ktorých spoznáme nealko pivo (porovnáva sa s textom bez diakritiky)
 NONALCOHOLIC_WORDS = (
     "nealko",
     "birell",
@@ -92,7 +92,7 @@ NONALCOHOLIC_WORDS = (
     "nealkoholicke",
 )
 
-# Názvy obchodních řetězců, jak je uvádí kupi.cz -> klíč pro vyhledání v OpenStreetMap
+# Názvy obchodných reťazcov, ako ich uvádza kupi.cz -> kľúč pre vyhľadanie v OpenStreetMap
 CHAIN_ALIASES: dict[str, tuple[str, ...]] = {
     "albert": ("albert",),
     "billa": ("billa",),
@@ -121,7 +121,7 @@ CHAIN_ALIASES: dict[str, tuple[str, ...]] = {
     "jip": ("jip",),
     "travel free": ("travel free",),
     "tuty": ("tuty",),
-    # slovenské řetězce
+    # slovenské reťazce
     "fresh": ("fresh",),
     "kraj": ("kraj",),
     "koruna": ("koruna",),
@@ -133,7 +133,7 @@ CHAIN_ALIASES: dict[str, tuple[str, ...]] = {
     "yeme": ("yeme",),
 }
 
-# Zobrazované názvy řetězců – podle nich obecný parser pozná obchod v textu stránky
+# Zobrazované názvy reťazcov – podľa nich všeobecný parser spozná obchod v texte stránky
 CHAIN_NAMES: dict[str, str] = {
     "albert": "Albert",
     "billa": "Billa",
@@ -170,11 +170,11 @@ CHAIN_NAMES: dict[str, str] = {
     "yeme": "Yeme",
 }
 
-# Online obchody – nemají kamennou pobočku
+# Online obchody – nemajú kamennú pobočku
 ONLINE_SHOPS = ("rohlik", "kosik", "tesco online", "albert online", "online", "kosik.sk")
 
-# Zdroje akcí. URL šablony: {query} = hledaný text, {slug} = značka ve tvaru "pilsner-urquell".
-# Adresy mimo kupi.cz nešlo při vývoji ověřit – lze je přepsat v nastavení (vlastní URL).
+# Zdroje akcií. URL šablóny: {query} = hľadaný text, {slug} = značka v tvare "pilsner-urquell".
+# Adresy mimo kupi.cz nebolo možné pri vývoji overiť – je možné ich prepísať v nastavení (vlastné URL).
 CONF_SOURCES = "sources"
 CONF_CUSTOM_URLS = "custom_urls"
 SOURCE_KUPI = "kupi"
@@ -234,7 +234,7 @@ SOURCES: dict[str, dict] = {
         ),
         "pages": False,
     },
-    # Slovensko – adresy ověřené přes vyhledávač (září 2026), {slug} = "zlaty-bazant"
+    # Slovensko – adresy overené cez vyhľadávač, {slug} = "zlaty-bazant"
     SOURCE_ZLACNENE: {
         "country": "SK",
         "name": "Zlacnene.sk",
@@ -298,8 +298,8 @@ COUNTRY_CZ = "CZ"
 COUNTRY_SK = "SK"
 DEFAULT_COUNTRY = COUNTRY_CZ
 
-# Nastavení podle země. bbox = hrubý obdélník (lat_min, lat_max, lon_min, lon_max),
-# přesnou hranici řeší Overpass area.
+# Nastavenie podľa krajiny. bbox = hrubý obdĺžnik (lat_min, lat_max, lon_min, lon_max),
+# presnú hranicu rieši Overpass area.
 COUNTRIES: dict[str, dict] = {
     COUNTRY_CZ: {
         "name": "Česká republika",

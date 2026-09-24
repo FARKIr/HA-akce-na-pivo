@@ -1,4 +1,4 @@
-"""Tlačítko pro okamžitou aktualizaci."""
+"""Tlačidlo pre okamžitú aktualizáciu."""
 
 from __future__ import annotations
 

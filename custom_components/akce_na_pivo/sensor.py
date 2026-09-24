@@ -1,4 +1,4 @@
-"""Senzory s nejlevnějšími akcemi na pivo."""
+"""Senzory s najlacnejšími akciami na pivo."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from .entity import BeerEntity, offer_attributes
 
 
 class CurrencyUnit:
-    """Jednotka podle zvolené země – CZK nebo EUR."""
+    """Jednotka podľa zvolenej krajiny – CZK alebo EUR."""
 
     coordinator: BeerDealsCoordinator
 
@@ -44,7 +44,7 @@ async def async_setup_entry(
 
 
 class CheapestBeerSensor(CurrencyUnit, BeerEntity, SensorEntity):
-    """Hlavní senzor – nejlevnější nabídka + seznam TOP N pro kartu."""
+    """Hlavný senzor – najlacnejšia ponuka + zoznam TOP N pre kartu."""
 
     _attr_icon = "mdi:beer"
     _attr_translation_key = "cheapest"
@@ -74,7 +74,7 @@ class CheapestBeerSensor(CurrencyUnit, BeerEntity, SensorEntity):
         attrs = offer_attributes(self._best)
         attrs.update(
             {
-                "value_type": "cena za balení"
+                "value_type": "cena za balenie"
                 if data.get("sort_by") == SORT_PRICE
                 else "cena za 0,5 l",
                 "sort_by": data.get("sort_by"),
@@ -97,7 +97,7 @@ class CheapestBeerSensor(CurrencyUnit, BeerEntity, SensorEntity):
 
 
 class CheapestHalfLiterSensor(CurrencyUnit, BeerEntity, SensorEntity):
-    """Nejnižší cena přepočtená na 0,5 l."""
+    """Najnižšia cena prepočítaná na 0,5 l."""
 
     _attr_icon = "mdi:glass-mug-variant"
     _attr_translation_key = "per_half_liter"
@@ -126,12 +126,12 @@ class CheapestHalfLiterSensor(CurrencyUnit, BeerEntity, SensorEntity):
 
 
 class OfferCountSensor(BeerEntity, SensorEntity):
-    """Počet nalezených akcí."""
+    """Počet nájdených akcií."""
 
     _attr_icon = "mdi:counter"
     _attr_translation_key = "count"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_native_unit_of_measurement = "akcí"
+    _attr_native_unit_of_measurement = "akcií"
 
     def __init__(self, coordinator: BeerDealsCoordinator) -> None:
         super().__init__(coordinator, "count")
@@ -148,13 +148,13 @@ class OfferCountSensor(BeerEntity, SensorEntity):
             "upcoming": len(data.get("upcoming", [])),
             "total_found": data.get("total_found"),
             "matching_by_source": data.get("by_source"),
-            # stav jednotlivých zdrojů – pomůže, když některý web změní adresy
+            # stav jednotlivých zdrojov – pomôže, keď niektorý web zmení adresy
             "sources": data.get("sources"),
         }
 
 
 class RankSensor(CurrencyUnit, BeerEntity, SensorEntity):
-    """N-tá nejlevnější nabídka – má polohu obchodu, takže jde na mapu."""
+    """N-tá najlacnejšia ponuka – má polohu obchodu, takže ide na mapu."""
 
     _attr_icon = "mdi:beer-outline"
     _attr_translation_key = "rank"
@@ -186,7 +186,7 @@ class RankSensor(CurrencyUnit, BeerEntity, SensorEntity):
 
 
 class BrandSensor(CurrencyUnit, BeerEntity, SensorEntity):
-    """Nejlevnější akce pro konkrétní značku."""
+    """Najlacnejšia akcia pre konkrétnu značku."""
 
     _attr_icon = "mdi:tag-outline"
     _attr_translation_key = "brand"

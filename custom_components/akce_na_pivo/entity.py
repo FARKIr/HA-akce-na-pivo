@@ -1,4 +1,4 @@
-"""Společný základ entit."""
+"""Spoločný základ entít."""
 
 from __future__ import annotations
 
